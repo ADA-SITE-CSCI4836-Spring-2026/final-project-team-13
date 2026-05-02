@@ -12,7 +12,16 @@ public class BedPatientSlot : MonoBehaviour
 
     private void Awake()
     {
+        EnsureBedLightController();
         RefreshTreatmentAnimator();
+    }
+
+    private void EnsureBedLightController()
+    {
+        if (GetComponent<BedLightController>() == null)
+        {
+            gameObject.AddComponent<BedLightController>();
+        }
     }
 
     private GameObject FindCurrentPatient()

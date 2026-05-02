@@ -231,6 +231,7 @@ public class BedFocusCameraController : MonoBehaviour
     {
         focusedBed = target.Root;
         focusedPatientSlot = target.Root.GetComponentInParent<BedPatientSlot>();
+        BedLightController.SetFocusedBed(focusedPatientSlot);
 
         var horizontalForward = Vector3.ProjectOnPlane(overviewRotation * Vector3.forward, Vector3.up).normalized;
         if (horizontalForward.sqrMagnitude < 0.01f)
@@ -254,6 +255,7 @@ public class BedFocusCameraController : MonoBehaviour
         ReturnFocusedDetailObject();
         focusedBed = null;
         focusedPatientSlot = null;
+        BedLightController.SetFocusedBed(null);
         MoveCamera(overviewPosition, overviewRotation, overviewFieldOfView);
         ShowOptions(false);
     }

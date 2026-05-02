@@ -384,6 +384,8 @@ public class PatientStorySystem : MonoBehaviour
 
     private void ShockAllPatients()
     {
+        BedLightController.FlickerAllBeds();
+
         var beds = FindObjectsOfType<BedPatientSlot>();
         foreach (var bed in beds)
         {
