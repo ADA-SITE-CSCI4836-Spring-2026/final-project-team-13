@@ -122,6 +122,65 @@ NavMeshSettings:
     debug:
       m_Flags: 0
   m_NavMeshData: {fileID: 0}
+--- !u!1 &765300100
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 765300101}
+  - component: {fileID: 765300102}
+  m_Layer: 0
+  m_Name: Intro Scene Controller
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &765300101
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 765300100}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 0}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &765300102
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 765300100}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: a77db1f7225d4069948a418b108388cb, type: 3}
+  m_Name:
+  m_EditorClassIdentifier:
+  introLines:
+  - Three patients.
+  - Not enough time.
+  - Time is your enemy.
+  - And theirs too.
+  - Your time starts now.
+  - tic... tac... tic... tac...
+  initialDelaySeconds: 0.5
+  fadeSeconds: 0.85
+  holdSeconds: 1.25
+  finalHoldSeconds: 2
+  fontSize: 46
+  textColor: {r: 0.9, g: 0.9, b: 0.86, a: 1}
+  backgroundColor: {r: 0, g: 0, b: 0, a: 1}
+  skipKey: 32
 --- !u!1 &998001000
 GameObject:
   m_ObjectHideFlags: 0
@@ -1154,6 +1213,7 @@ GameObject:
 SceneRoots:
   m_ObjectHideFlags: 0
   m_Roots:
+  - {fileID: 765300101}
   - {fileID: 492365375}
   - {fileID: 543450652478024044}
   - {fileID: 300680774}
