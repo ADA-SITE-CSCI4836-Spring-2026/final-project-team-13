@@ -3,90 +3,49 @@ using UnityEngine;
 public class BedPatientSlot : MonoBehaviour
 {
     [SerializeField] private Transform patientMount;
-    [SerializeField] private Object defaultPatientPrefab;
-    [SerializeField] private bool spawnDefaultPatientOnStart = true;
-    [SerializeField] private Vector3 patientLocalPosition = Vector3.zero;
-    [SerializeField] private Vector3 patientLocalEulerAngles = new Vector3(0f, 0f, 0f);
-    [SerializeField] private Vector3 patientLocalScale = Vector3.one;
 
-    private GameObject currentPatient;
     private PatientTreatmentAnimator treatmentAnimator;
 
     public Transform PatientMount => patientMount != null ? patientMount : transform;
-    public GameObject CurrentPatient => currentPatient;
+    public GameObject CurrentPatient => FindCurrentPatient();
     public PatientTreatmentAnimator TreatmentAnimator => treatmentAnimator;
 
-    private void Start()
+    private void Awake()
     {
-        if (spawnDefaultPatientOnStart && currentPatient == null && defaultPatientPrefab != null)
-        {
-            SpawnPatient(defaultPatientPrefab);
-        }
+        RefreshTreatmentAnimator();
     }
 
-    public GameObject SpawnPatient(Object patientPrefab)
+    private GameObject FindCurrentPatient()
     {
-        var prefabGameObject = ResolvePatientPrefab(patientPrefab);
-        if (prefabGameObject == null)
+        if (treatmentAnimator != null)
         {
-            Debug.LogWarning($"Cannot spawn patient on '{name}'. Assign a patient prefab GameObject or component.");
-            return null;
+            return treatmentAnimator.gameObject;
         }
 
-        ClearPatient();
-
-        currentPatient = (GameObject)Instantiate(prefabGameObject, PatientMount, false);
-        currentPatient.transform.localPosition = patientLocalPosition;
-        currentPatient.transform.localRotation = Quaternion.Euler(patientLocalEulerAngles);
-        currentPatient.transform.localScale = patientLocalScale;
-
-        treatmentAnimator = currentPatient.GetComponentInChildren<PatientTreatmentAnimator>();
-        if (treatmentAnimator == null)
+        var patientAnimator = PatientMount.GetComponentInChildren<Animator>();
+        if (patientAnimator != null)
         {
-            treatmentAnimator = currentPatient.AddComponent<PatientTreatmentAnimator>();
+            return patientAnimator.gameObject;
         }
 
-        return currentPatient;
-    }
-
-    private static GameObject ResolvePatientPrefab(Object patientPrefab)
-    {
-        if (patientPrefab == null)
+        if (PatientMount.childCount > 0)
         {
-            return null;
-        }
-
-        if (patientPrefab is GameObject prefabGameObject)
-        {
-            return prefabGameObject;
-        }
-
-        if (patientPrefab is Component component)
-        {
-            return component.gameObject;
+            return PatientMount.GetChild(0).gameObject;
         }
 
         return null;
     }
 
-    public void ClearPatient()
+    private void RefreshTreatmentAnimator()
     {
-        if (currentPatient == null)
-        {
-            treatmentAnimator = null;
-            return;
-        }
-
-        Destroy(currentPatient);
-        currentPatient = null;
-        treatmentAnimator = null;
+        treatmentAnimator = PatientMount.GetComponentInChildren<PatientTreatmentAnimator>();
     }
 
     public void ApplyTreatment(TreatmentType treatment)
     {
         if (treatmentAnimator == null)
         {
-            treatmentAnimator = GetComponentInChildren<PatientTreatmentAnimator>();
+            RefreshTreatmentAnimator();
         }
 
         if (treatmentAnimator == null)
@@ -102,7 +61,7 @@ public class BedPatientSlot : MonoBehaviour
     {
         if (treatmentAnimator == null)
         {
-            treatmentAnimator = GetComponentInChildren<PatientTreatmentAnimator>();
+            RefreshTreatmentAnimator();
         }
 
         if (treatmentAnimator == null)
