@@ -20,6 +20,13 @@ public class BedFocusCameraController : MonoBehaviour
     [SerializeField] private Vector3 focusDetailCameraLocalPosition = new Vector3(5.5f, -2f, 13f);
     [SerializeField] private float focusDetailScaleMultiplier = 1.35f;
     [SerializeField] private Vector3 focusDetailFaceCameraEulerOffset = new Vector3(0f, 0f, -113.5f);
+    [SerializeField] private bool showStoryTextOnTablet = true;
+    [SerializeField] private Vector3 tabletTextLocalPosition = new Vector3(-0.08f, 0.07f, 0.05f);
+    [SerializeField] private Vector3 tabletTextLocalEulerAngles = new Vector3(0f, 180f, -90f);
+    [SerializeField] private Vector3 tabletTextLocalScale = new Vector3(0.02f, 0.02f, 0.02f);
+    [SerializeField] private float tabletTextCharacterSize = 0.12f;
+    [SerializeField] private int tabletTextFontSize = 36;
+    [SerializeField] private Color tabletTextColor = Color.black;
 
     private readonly List<FocusTarget> focusTargets = new List<FocusTarget>();
     private Coroutine moveRoutine;
@@ -31,6 +38,8 @@ public class BedFocusCameraController : MonoBehaviour
     private BedPatientSlot focusedPatientSlot;
     private GameObject optionsPanel;
     private Coroutine detailMoveRoutine;
+    private PatientStorySystem storySystem;
+    private TextMesh focusedStoryText;
     private readonly Dictionary<Transform, DetailTransformSnapshot> detailSnapshots = new Dictionary<Transform, DetailTransformSnapshot>();
 
     private struct FocusTarget
@@ -53,6 +62,7 @@ public class BedFocusCameraController : MonoBehaviour
 
     private void Start()
     {
+        storySystem = PatientStorySystem.EnsureExists();
         CacheOverviewPose();
         RefreshBeds();
 
@@ -70,6 +80,8 @@ public class BedFocusCameraController : MonoBehaviour
         {
             ReturnToOverview();
         }
+
+        RefreshFocusedStoryText();
     }
 
     private void CacheOverviewPose()
@@ -203,6 +215,7 @@ public class BedFocusCameraController : MonoBehaviour
     private void FocusBed(FocusTarget target, Bounds bounds)
     {
         focusedBed = target.Root;
+        focusedPatientSlot = target.Root.GetComponentInParent<BedPatientSlot>();
 
         var horizontalForward = Vector3.ProjectOnPlane(overviewRotation * Vector3.forward, Vector3.up).normalized;
         if (horizontalForward.sqrMagnitude < 0.01f)
@@ -222,6 +235,7 @@ public class BedFocusCameraController : MonoBehaviour
 
     public void ReturnToOverview()
     {
+        SetFocusedStoryTextVisible(false);
         ReturnFocusedDetailObject();
         focusedBed = null;
         focusedPatientSlot = null;
@@ -415,6 +429,9 @@ public class BedFocusCameraController : MonoBehaviour
         }
 
         focusedDetailObject = detailObject;
+        focusedStoryText = EnsureTabletStoryText(detailObject);
+        SetFocusedStoryTextVisible(true);
+        RefreshFocusedStoryText();
 
         if (!detailSnapshots.ContainsKey(detailObject))
         {
@@ -444,6 +461,7 @@ public class BedFocusCameraController : MonoBehaviour
 
         RestoreDetailObject(focusedDetailObject, transitionSeconds);
         focusedDetailObject = null;
+        focusedStoryText = null;
     }
 
     private void RestoreDetailObject(Transform detailObject, float seconds)
@@ -550,5 +568,55 @@ public class BedFocusCameraController : MonoBehaviour
         }
 
         return null;
+    }
+
+    private TextMesh EnsureTabletStoryText(Transform detailObject)
+    {
+        if (!showStoryTextOnTablet || detailObject == null)
+        {
+            return null;
+        }
+
+        foreach (var textMesh in detailObject.GetComponentsInChildren<TextMesh>(true))
+        {
+            if (textMesh.name == "Tablet Story Text")
+            {
+                return textMesh;
+            }
+        }
+
+        var textObject = new GameObject("Tablet Story Text");
+        textObject.transform.SetParent(detailObject, false);
+        textObject.transform.localPosition = tabletTextLocalPosition;
+        textObject.transform.localRotation = Quaternion.Euler(tabletTextLocalEulerAngles);
+        textObject.transform.localScale = tabletTextLocalScale;
+
+        var text = textObject.AddComponent<TextMesh>();
+        text.anchor = TextAnchor.UpperLeft;
+        text.alignment = TextAlignment.Left;
+        text.characterSize = tabletTextCharacterSize;
+        text.fontSize = tabletTextFontSize;
+        text.color = tabletTextColor;
+
+        return text;
+    }
+
+    private void RefreshFocusedStoryText()
+    {
+        if (focusedStoryText == null || focusedPatientSlot == null)
+        {
+            return;
+        }
+
+        storySystem = storySystem != null ? storySystem : PatientStorySystem.EnsureExists();
+        focusedStoryText.text = storySystem.GetPatientStatus(focusedPatientSlot);
+    }
+
+    private void SetFocusedStoryTextVisible(bool visible)
+    {
+        if (focusedStoryText != null)
+        {
+            focusedStoryText.gameObject.SetActive(visible);
+        }
     }
 }

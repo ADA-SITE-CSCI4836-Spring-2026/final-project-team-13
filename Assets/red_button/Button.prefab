@@ -118,5 +118,3 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 7e50529edeb44cb2a3c520badcec85c2, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  targetBed: {fileID: 0}
-  useFocusedBedWhenNoTarget: 1
