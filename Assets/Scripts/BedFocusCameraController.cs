@@ -22,6 +22,7 @@ public class BedFocusCameraController : MonoBehaviour
     private Quaternion overviewRotation;
     private float overviewFieldOfView;
     private Transform focusedBed;
+    private BedPatientSlot focusedPatientSlot;
     private GameObject optionsPanel;
     private Text optionsTitle;
 
@@ -51,11 +52,6 @@ public class BedFocusCameraController : MonoBehaviour
 
     private void Update()
     {
-        if (Input.GetMouseButtonDown(0) && !PointerIsOverUi())
-        {
-            TryFocusClickedBed();
-        }
-
         if (focusedBed != null && (Input.GetKeyDown(KeyCode.Escape) || Input.GetMouseButtonDown(1)))
         {
             ReturnToOverview();
@@ -165,6 +161,31 @@ public class BedFocusCameraController : MonoBehaviour
         }
     }
 
+    public void Focus(BedFocusTarget bedTarget)
+    {
+        if (bedTarget == null)
+        {
+            return;
+        }
+
+        focusedPatientSlot = bedTarget.GetComponentInParent<BedPatientSlot>();
+        Focus(bedTarget.FocusRoot, bedTarget.DisplayName);
+    }
+
+    public void Focus(Transform focusRoot, string label)
+    {
+        if (focusRoot == null || !TryGetRendererBounds(focusRoot, out var bounds))
+        {
+            return;
+        }
+
+        FocusBed(new FocusTarget
+        {
+            Root = focusRoot,
+            Label = string.IsNullOrWhiteSpace(label) ? focusRoot.name : label
+        }, bounds);
+    }
+
     private void FocusBed(FocusTarget target, Bounds bounds)
     {
         focusedBed = target.Root;
@@ -188,8 +209,25 @@ public class BedFocusCameraController : MonoBehaviour
     public void ReturnToOverview()
     {
         focusedBed = null;
+        focusedPatientSlot = null;
         MoveCamera(overviewPosition, overviewRotation, overviewFieldOfView);
         ShowOptions(false);
+    }
+
+    public void ApplyFocusedTreatment(TreatmentType treatment)
+    {
+        if (focusedPatientSlot == null && focusedBed != null)
+        {
+            focusedPatientSlot = focusedBed.GetComponentInParent<BedPatientSlot>();
+        }
+
+        if (focusedPatientSlot == null)
+        {
+            Debug.LogWarning("No patient slot found for the focused bed.");
+            return;
+        }
+
+        focusedPatientSlot.ApplyTreatment(treatment);
     }
 
     private void MoveCamera(Vector3 targetPosition, Quaternion targetRotation, float targetFieldOfView)
@@ -294,7 +332,7 @@ public class BedFocusCameraController : MonoBehaviour
         rect.anchorMax = new Vector2(1f, 0f);
         rect.pivot = new Vector2(1f, 0f);
         rect.anchoredPosition = optionsPanelAnchoredPosition;
-        rect.sizeDelta = new Vector2(260f, 190f);
+        rect.sizeDelta = new Vector2(260f, 318f);
 
         optionsTitle = CreateText(optionsPanel.transform, "Selected Bed", 18, FontStyle.Bold);
         var titleRect = optionsTitle.GetComponent<RectTransform>();
@@ -304,9 +342,12 @@ public class BedFocusCameraController : MonoBehaviour
         titleRect.anchoredPosition = new Vector2(0f, -16f);
         titleRect.sizeDelta = new Vector2(-28f, 32f);
 
-        CreateButton(optionsPanel.transform, "View Patient", new Vector2(0f, -64f), () => Debug.Log("View Patient option clicked."));
-        CreateButton(optionsPanel.transform, "Assign Treatment", new Vector2(0f, -106f), () => Debug.Log("Assign Treatment option clicked."));
-        CreateButton(optionsPanel.transform, "Back", new Vector2(0f, -148f), ReturnToOverview);
+        CreateButton(optionsPanel.transform, "Inspect", new Vector2(0f, -64f), () => ApplyFocusedTreatment(TreatmentType.Inspect));
+        CreateButton(optionsPanel.transform, "Medication", new Vector2(0f, -106f), () => ApplyFocusedTreatment(TreatmentType.Medication));
+        CreateButton(optionsPanel.transform, "Surgery", new Vector2(0f, -148f), () => ApplyFocusedTreatment(TreatmentType.Surgery));
+        CreateButton(optionsPanel.transform, "Shock", new Vector2(0f, -190f), () => ApplyFocusedTreatment(TreatmentType.Shock));
+        CreateButton(optionsPanel.transform, "Rest", new Vector2(0f, -232f), () => ApplyFocusedTreatment(TreatmentType.Rest));
+        CreateButton(optionsPanel.transform, "Back", new Vector2(0f, -274f), ReturnToOverview);
     }
 
     private void SetOptionsTitle(string bedName)
