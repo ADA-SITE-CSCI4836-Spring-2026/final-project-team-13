@@ -18,9 +18,9 @@ public class PatientStorySystem : MonoBehaviour
     public static PatientStorySystem Instance { get; private set; }
 
     [SerializeField] private float decisionSeconds = 30f;
-    [SerializeField] private string womanScreamClipPath = "Audio/woman_scream";
+    [SerializeField] private string electroshockClipPath = "Audio/shocksound";
     [SerializeField] private string heartbeatClipPath = "Audio/heartbeat";
-    [SerializeField] private float screamVolume = 1f;
+    [SerializeField] private float electroshockVolume = 1f;
     [SerializeField] private float heartbeatVolume = 0.6f;
 
     private readonly PatientStory[] patients =
@@ -94,7 +94,7 @@ public class PatientStorySystem : MonoBehaviour
     private StoryPhase phase = StoryPhase.AwaitingFirstShock;
     private AudioSource oneShotAudioSource;
     private AudioSource heartbeatAudioSource;
-    private AudioClip womanScreamClip;
+    private AudioClip electroshockClip;
     private AudioClip heartbeatClip;
 
     public int Stage => stage;
@@ -221,7 +221,7 @@ public class PatientStorySystem : MonoBehaviour
 
         if (phase == StoryPhase.AwaitingFirstShock)
         {
-            PlayWomanScream();
+            PlayElectroshockSound();
             shockPresses = 1;
             SetStage(2);
             phase = StoryPhase.ChooseAfterFirstShock;
@@ -233,7 +233,7 @@ public class PatientStorySystem : MonoBehaviour
 
         if (phase == StoryPhase.AwaitingSecondShock)
         {
-            PlayWomanScream();
+            PlayElectroshockSound();
             shockPresses = 2;
             SetStage(3);
             phase = StoryPhase.ChooseAfterSecondShock;
@@ -245,7 +245,7 @@ public class PatientStorySystem : MonoBehaviour
 
         if (phase == StoryPhase.AwaitingFinalShock)
         {
-            PlayWomanScream();
+            PlayElectroshockSound();
             shockPresses = 3;
             SetStage(3);
             phase = StoryPhase.Lost;
@@ -409,21 +409,21 @@ public class PatientStorySystem : MonoBehaviour
         heartbeatAudioSource.volume = heartbeatVolume;
         heartbeatAudioSource.spatialBlend = 0f;
 
-        womanScreamClip = Resources.Load<AudioClip>(womanScreamClipPath);
+        electroshockClip = Resources.Load<AudioClip>(electroshockClipPath);
         heartbeatClip = Resources.Load<AudioClip>(heartbeatClipPath);
         heartbeatAudioSource.clip = heartbeatClip;
     }
 
-    private void PlayWomanScream()
+    private void PlayElectroshockSound()
     {
         if (oneShotAudioSource == null)
         {
             ConfigureAudio();
         }
 
-        if (womanScreamClip != null)
+        if (electroshockClip != null)
         {
-            oneShotAudioSource.PlayOneShot(womanScreamClip, screamVolume);
+            oneShotAudioSource.PlayOneShot(electroshockClip, electroshockVolume);
         }
     }
 
