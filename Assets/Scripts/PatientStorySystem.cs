@@ -4,9 +4,24 @@ using UnityEngine;
 
 public class PatientStorySystem : MonoBehaviour
 {
+    private enum StoryPhase
+    {
+        AwaitingFirstShock,
+        ChooseAfterFirstShock,
+        AwaitingSecondShock,
+        ChooseAfterSecondShock,
+        AwaitingFinalShock,
+        Won,
+        Lost
+    }
+
     public static PatientStorySystem Instance { get; private set; }
 
-    [SerializeField] private float decisionSeconds = 15f;
+    [SerializeField] private float decisionSeconds = 30f;
+    [SerializeField] private string womanScreamClipPath = "Audio/woman_scream";
+    [SerializeField] private string heartbeatClipPath = "Audio/heartbeat";
+    [SerializeField] private float screamVolume = 1f;
+    [SerializeField] private float heartbeatVolume = 0.6f;
 
     private readonly PatientStory[] patients =
     {
@@ -17,7 +32,7 @@ public class PatientStorySystem : MonoBehaviour
             "Immediate intervention required",
             "Heart rhythm stabilized",
             "Oxygen levels improved",
-            "Internal stress increasing",
+            "Condition: stable",
             "Heart rhythm weakening",
             "Oxygen levels dropping",
             "Intervention required",
@@ -31,13 +46,13 @@ public class PatientStorySystem : MonoBehaviour
             "Oxygen depletion critical",
             "No intervention applied"),
         new PatientStory(
-            "Araz, 52",
+            "Samira, 52",
             "Found unconscious at incident site",
             "Multiple trauma injuries",
             "Condition critical",
             "Circulation partially restored",
             "External condition improved",
-            "Internal damage spreading",
+            "Condition: stable",
             "Blood pressure decreasing",
             "Condition deteriorating",
             "No intervention applied",
@@ -57,7 +72,7 @@ public class PatientStorySystem : MonoBehaviour
             "System entry unstable",
             "System response triggered",
             "Data fragments recovered",
-            "Instability increasing",
+            "Condition: critical",
             "System inactive",
             "No data recovered",
             "Condition unstable",
@@ -75,12 +90,72 @@ public class PatientStorySystem : MonoBehaviour
     private int stage = 1;
     private int shockPresses;
     private float timer;
-    private bool storyComplete;
+    private bool timerStarted;
+    private StoryPhase phase = StoryPhase.AwaitingFirstShock;
+    private AudioSource oneShotAudioSource;
+    private AudioSource heartbeatAudioSource;
+    private AudioClip womanScreamClip;
+    private AudioClip heartbeatClip;
 
     public int Stage => stage;
     public int ShockPresses => shockPresses;
-    public float TimeRemaining => storyComplete ? 0f : Mathf.Max(0f, timer);
-    public bool StoryComplete => storyComplete;
+    public float TimeRemaining => IsTimerRunning ? Mathf.Max(0f, timer) : 0f;
+    public bool StoryComplete => phase == StoryPhase.Won || phase == StoryPhase.Lost;
+    public bool CanEndDecision =>
+        phase == StoryPhase.AwaitingFirstShock ||
+        phase == StoryPhase.AwaitingSecondShock ||
+        phase == StoryPhase.AwaitingFinalShock;
+    public bool CanStopTreatment => phase == StoryPhase.ChooseAfterFirstShock || phase == StoryPhase.ChooseAfterSecondShock;
+    public bool CanContinueTreatment => phase == StoryPhase.ChooseAfterFirstShock || phase == StoryPhase.ChooseAfterSecondShock;
+    public bool IsTimerRunning =>
+        timerStarted &&
+        (phase == StoryPhase.AwaitingFirstShock ||
+         phase == StoryPhase.ChooseAfterFirstShock ||
+         phase == StoryPhase.AwaitingSecondShock ||
+         phase == StoryPhase.ChooseAfterSecondShock ||
+         phase == StoryPhase.AwaitingFinalShock);
+    public string PromptText
+    {
+        get
+        {
+            if (phase == StoryPhase.ChooseAfterFirstShock)
+            {
+                return "Stop or continue? You can save 2 people, or risk it. hit the button. Time: " + Mathf.CeilToInt(TimeRemaining) + "s";
+            }
+
+            if (phase == StoryPhase.AwaitingSecondShock)
+            {
+                return "Continue selected. Next shock required. Time: " + Mathf.CeilToInt(TimeRemaining) + "s";
+            }
+
+            if (phase == StoryPhase.ChooseAfterSecondShock)
+            {
+                return "Two shocks applied. Stop now, or risk one last shock. Time: " + Mathf.CeilToInt(TimeRemaining) + "s";
+            }
+
+            if (phase == StoryPhase.AwaitingFinalShock)
+            {
+                return "Final risk. Time: " + Mathf.CeilToInt(TimeRemaining) + "s";
+            }
+
+            if (phase == StoryPhase.Won)
+            {
+                return "YOU WON!!! You saved 2 people.";
+            }
+
+            if (phase == StoryPhase.Lost)
+            {
+                return "YOU LOST. The final shock killed them all.";
+            }
+
+            if (!timerStarted)
+            {
+                return "Time starts after the intro.";
+            }
+
+            return "Time: " + Mathf.CeilToInt(TimeRemaining) + "s";
+        }
+    }
 
     public static PatientStorySystem EnsureExists()
     {
@@ -109,12 +184,23 @@ public class PatientStorySystem : MonoBehaviour
         }
 
         Instance = this;
+        ConfigureAudio();
         ResetTimer();
+    }
+
+    private void Start()
+    {
+        if (!timerStarted && FindObjectOfType<IntroSceneController>() == null)
+        {
+            BeginStoryTimer();
+        }
     }
 
     private void Update()
     {
-        if (storyComplete)
+        SyncHeartbeatAudio();
+
+        if (!IsTimerRunning)
         {
             return;
         }
@@ -128,21 +214,45 @@ public class PatientStorySystem : MonoBehaviour
 
     public void RegisterGlobalShock()
     {
-        if (!storyComplete)
+        if (!timerStarted)
         {
-            shockPresses++;
-
-            if (stage == 1)
-            {
-                SetStage(2);
-            }
-            else if (stage == 2)
-            {
-                SetStage(3);
-            }
+            return;
         }
 
-        ShockAllPatients();
+        if (phase == StoryPhase.AwaitingFirstShock)
+        {
+            PlayWomanScream();
+            shockPresses = 1;
+            SetStage(2);
+            phase = StoryPhase.ChooseAfterFirstShock;
+            ResetTimer();
+            ShockAllPatients();
+            SyncHeartbeatAudio();
+            return;
+        }
+
+        if (phase == StoryPhase.AwaitingSecondShock)
+        {
+            PlayWomanScream();
+            shockPresses = 2;
+            SetStage(3);
+            phase = StoryPhase.ChooseAfterSecondShock;
+            ResetTimer();
+            ShockAllPatients();
+            SyncHeartbeatAudio();
+            return;
+        }
+
+        if (phase == StoryPhase.AwaitingFinalShock)
+        {
+            PlayWomanScream();
+            shockPresses = 3;
+            SetStage(3);
+            phase = StoryPhase.Lost;
+            ShockAllPatients();
+            StopHeartbeatAudio();
+            GameResultOverlay.ShowLoss();
+        }
     }
 
     public string GetPatientStatus(BedPatientSlot bed)
@@ -171,35 +281,97 @@ public class PatientStorySystem : MonoBehaviour
             builder.AppendLine(line);
         }
 
-        if (!storyComplete)
+        return builder.ToString();
+    }
+
+    public void EndCurrentDecision()
+    {
+        if (!timerStarted)
         {
-            builder.AppendLine();
-            builder.Append("Decision time: ");
-            builder.Append(Mathf.CeilToInt(TimeRemaining));
-            builder.Append('s');
+            return;
         }
 
-        return builder.ToString();
+        if (IsTimerRunning)
+        {
+            AdvanceWithoutShock();
+        }
+    }
+
+    public void BeginStoryTimer()
+    {
+        if (timerStarted)
+        {
+            return;
+        }
+
+        timerStarted = true;
+        ResetTimer();
+        SyncHeartbeatAudio();
+    }
+
+    public void StopTreatment()
+    {
+        if (!CanStopTreatment)
+        {
+            return;
+        }
+
+        SetStage(3);
+        phase = StoryPhase.Won;
+        StopHeartbeatAudio();
+        GameResultOverlay.ShowWin();
+    }
+
+    public void ContinueTreatment()
+    {
+        if (phase == StoryPhase.ChooseAfterFirstShock)
+        {
+            phase = StoryPhase.AwaitingSecondShock;
+            ResetTimer();
+            SyncHeartbeatAudio();
+        }
+        else if (phase == StoryPhase.ChooseAfterSecondShock)
+        {
+            phase = StoryPhase.AwaitingFinalShock;
+            ResetTimer();
+            SyncHeartbeatAudio();
+        }
     }
 
     private void AdvanceWithoutShock()
     {
-        if (stage == 1)
-        {
-            SetStage(2);
-        }
-        else if (stage == 2)
+        if (phase == StoryPhase.AwaitingFirstShock)
         {
             SetStage(3);
+            phase = StoryPhase.Lost;
+            StopHeartbeatAudio();
+            GameResultOverlay.ShowLoss();
+        }
+        else if (phase == StoryPhase.ChooseAfterFirstShock || phase == StoryPhase.ChooseAfterSecondShock)
+        {
+            StopTreatment();
+        }
+        else if (phase == StoryPhase.AwaitingSecondShock)
+        {
+            SetStage(3);
+            phase = StoryPhase.Lost;
+            StopHeartbeatAudio();
+            GameResultOverlay.ShowLoss();
+        }
+        else if (phase == StoryPhase.AwaitingFinalShock)
+        {
+            SetStage(3);
+            phase = StoryPhase.Won;
+            StopHeartbeatAudio();
+            GameResultOverlay.ShowWin();
         }
     }
 
     private void SetStage(int nextStage)
     {
         stage = Mathf.Clamp(nextStage, 1, 3);
-        storyComplete = stage >= 3;
 
-        if (!storyComplete)
+        if (IsTimerRunning)
         {
             ResetTimer();
         }
@@ -215,10 +387,75 @@ public class PatientStorySystem : MonoBehaviour
         var beds = FindObjectsOfType<BedPatientSlot>();
         foreach (var bed in beds)
         {
-            if (bed != null)
+            if (bed != null && bed.CurrentPatient != null)
             {
                 bed.ApplyTreatment(TreatmentType.Shock);
             }
+        }
+    }
+
+    private void ConfigureAudio()
+    {
+        oneShotAudioSource = gameObject.AddComponent<AudioSource>();
+        oneShotAudioSource.playOnAwake = false;
+        oneShotAudioSource.loop = false;
+        oneShotAudioSource.spatialBlend = 0f;
+
+        heartbeatAudioSource = gameObject.AddComponent<AudioSource>();
+        heartbeatAudioSource.playOnAwake = false;
+        heartbeatAudioSource.loop = true;
+        heartbeatAudioSource.volume = heartbeatVolume;
+        heartbeatAudioSource.spatialBlend = 0f;
+
+        womanScreamClip = Resources.Load<AudioClip>(womanScreamClipPath);
+        heartbeatClip = Resources.Load<AudioClip>(heartbeatClipPath);
+        heartbeatAudioSource.clip = heartbeatClip;
+    }
+
+    private void PlayWomanScream()
+    {
+        if (oneShotAudioSource == null)
+        {
+            ConfigureAudio();
+        }
+
+        if (womanScreamClip != null)
+        {
+            oneShotAudioSource.PlayOneShot(womanScreamClip, screamVolume);
+        }
+    }
+
+    private void SyncHeartbeatAudio()
+    {
+        if (heartbeatAudioSource == null)
+        {
+            ConfigureAudio();
+        }
+
+        if (heartbeatClip == null)
+        {
+            return;
+        }
+
+        if (IsTimerRunning)
+        {
+            heartbeatAudioSource.volume = heartbeatVolume;
+            if (!heartbeatAudioSource.isPlaying)
+            {
+                heartbeatAudioSource.Play();
+            }
+        }
+        else
+        {
+            StopHeartbeatAudio();
+        }
+    }
+
+    private void StopHeartbeatAudio()
+    {
+        if (heartbeatAudioSource != null && heartbeatAudioSource.isPlaying)
+        {
+            heartbeatAudioSource.Stop();
         }
     }
 

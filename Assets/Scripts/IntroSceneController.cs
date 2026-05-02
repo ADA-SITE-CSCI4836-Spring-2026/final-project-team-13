@@ -1,5 +1,6 @@
 using System.Collections;
 using UnityEngine;
+using UnityEngine.EventSystems;
 using UnityEngine.UI;
 
 [DisallowMultipleComponent]
@@ -74,6 +75,7 @@ public sealed class IntroSceneController : MonoBehaviour
         }
 
         yield return FadeOverlay(1f, 0f, fadeSeconds);
+        PatientStorySystem.EnsureExists().BeginStoryTimer();
         Destroy(gameObject);
     }
 
@@ -133,6 +135,7 @@ public sealed class IntroSceneController : MonoBehaviour
         scaler.matchWidthOrHeight = 0.5f;
 
         canvasObject.AddComponent<GraphicRaycaster>();
+        EnsureEventSystem();
         canvasGroup = canvasObject.AddComponent<CanvasGroup>();
         canvasGroup.blocksRaycasts = true;
         canvasGroup.alpha = 1f;
@@ -166,6 +169,14 @@ public sealed class IntroSceneController : MonoBehaviour
         textRect.anchorMax = new Vector2(0.88f, 0.75f);
         textRect.offsetMin = Vector2.zero;
         textRect.offsetMax = Vector2.zero;
+
+        var skipButton = CreateButton(canvasObject.transform, "Skip", RequestSkip);
+        var skipRect = skipButton.GetComponent<RectTransform>();
+        skipRect.anchorMin = new Vector2(1f, 1f);
+        skipRect.anchorMax = new Vector2(1f, 1f);
+        skipRect.pivot = new Vector2(1f, 1f);
+        skipRect.anchoredPosition = new Vector2(-24f, -24f);
+        skipRect.sizeDelta = new Vector2(110f, 42f);
     }
 
     private void ConfigureTickingAudio()
@@ -176,5 +187,53 @@ public sealed class IntroSceneController : MonoBehaviour
         tickingSource.loop = true;
         tickingSource.volume = 0.65f;
         tickingSource.spatialBlend = 0f;
+    }
+
+    private void RequestSkip()
+    {
+        skipRequested = true;
+    }
+
+    private static Button CreateButton(Transform parent, string label, UnityEngine.Events.UnityAction action)
+    {
+        var buttonObject = new GameObject(label);
+        buttonObject.transform.SetParent(parent, false);
+
+        var image = buttonObject.AddComponent<Image>();
+        image.color = new Color(0.18f, 0.19f, 0.2f, 0.9f);
+
+        var button = buttonObject.AddComponent<Button>();
+        button.onClick.AddListener(action);
+
+        var textObject = new GameObject("Text");
+        textObject.transform.SetParent(buttonObject.transform, false);
+        var text = textObject.AddComponent<Text>();
+        text.text = label;
+        var font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+        text.font = font != null ? font : Resources.GetBuiltinResource<Font>("Arial.ttf");
+        text.fontSize = 18;
+        text.fontStyle = FontStyle.Bold;
+        text.alignment = TextAnchor.MiddleCenter;
+        text.color = Color.white;
+
+        var textRect = text.GetComponent<RectTransform>();
+        textRect.anchorMin = Vector2.zero;
+        textRect.anchorMax = Vector2.one;
+        textRect.offsetMin = Vector2.zero;
+        textRect.offsetMax = Vector2.zero;
+
+        return button;
+    }
+
+    private static void EnsureEventSystem()
+    {
+        if (EventSystem.current != null)
+        {
+            return;
+        }
+
+        var eventSystem = new GameObject("EventSystem");
+        eventSystem.AddComponent<EventSystem>();
+        eventSystem.AddComponent<StandaloneInputModule>();
     }
 }

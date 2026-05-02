@@ -14,6 +14,10 @@ public class BedFocusCameraController : MonoBehaviour
     [SerializeField] private float focusWorldZOffset = -10f;
     [SerializeField] private float focusFieldOfView = 38f;
     [SerializeField] private Vector2 backButtonAnchoredPosition = new Vector2(24f, -24f);
+    [SerializeField] private Vector2 timerTextAnchoredPosition = new Vector2(0f, -24f);
+    [SerializeField] private Vector2 endDecisionButtonAnchoredPosition = new Vector2(-24f, -24f);
+    [SerializeField] private Vector2 stopButtonAnchoredPosition = new Vector2(-24f, -68f);
+    [SerializeField] private Vector2 continueButtonAnchoredPosition = new Vector2(-140f, -68f);
     [SerializeField] private bool buildOptionsUi = true;
     [SerializeField] private bool moveFocusDetailObject = true;
     [SerializeField] private string focusDetailObjectName = "tabletpen";
@@ -37,6 +41,11 @@ public class BedFocusCameraController : MonoBehaviour
     private Transform focusedDetailObject;
     private BedPatientSlot focusedPatientSlot;
     private GameObject optionsPanel;
+    private RectTransform backButtonRect;
+    private GameObject endDecisionButtonObject;
+    private GameObject stopButtonObject;
+    private GameObject continueButtonObject;
+    private Text timerText;
     private Coroutine detailMoveRoutine;
     private PatientStorySystem storySystem;
     private TextMesh focusedStoryText;
@@ -81,7 +90,13 @@ public class BedFocusCameraController : MonoBehaviour
             ReturnToOverview();
         }
 
+        if (focusedBed != null && Input.GetMouseButtonDown(0) && PointerIsOverBackButton())
+        {
+            ReturnToOverview();
+        }
+
         RefreshFocusedStoryText();
+        RefreshStoryHud();
     }
 
     private void CacheOverviewPose()
@@ -325,6 +340,14 @@ public class BedFocusCameraController : MonoBehaviour
         return EventSystem.current != null && EventSystem.current.IsPointerOverGameObject();
     }
 
+    private bool PointerIsOverBackButton()
+    {
+        return backButtonRect != null &&
+            optionsPanel != null &&
+            optionsPanel.activeInHierarchy &&
+            RectTransformUtility.RectangleContainsScreenPoint(backButtonRect, Input.mousePosition);
+    }
+
     private void EnsureEventSystem()
     {
         if (EventSystem.current != null)
@@ -352,6 +375,38 @@ public class BedFocusCameraController : MonoBehaviour
 
         var backButton = CreateButton(canvasObject.transform, "Back", backButtonAnchoredPosition, ReturnToOverview);
         optionsPanel = backButton.gameObject;
+        backButtonRect = optionsPanel.GetComponent<RectTransform>();
+
+        timerText = CreateText(canvasObject.transform, "Time: 30s", 22, FontStyle.Bold);
+        timerText.alignment = TextAnchor.MiddleCenter;
+        var timerRect = timerText.GetComponent<RectTransform>();
+        timerRect.anchorMin = new Vector2(0.5f, 1f);
+        timerRect.anchorMax = new Vector2(0.5f, 1f);
+        timerRect.pivot = new Vector2(0.5f, 1f);
+        timerRect.anchoredPosition = timerTextAnchoredPosition;
+        timerRect.sizeDelta = new Vector2(760f, 42f);
+
+        var endDecisionButton = CreateButton(canvasObject.transform, "End", endDecisionButtonAnchoredPosition, EndCurrentDecision);
+        endDecisionButtonObject = endDecisionButton.gameObject;
+        var endButtonRect = endDecisionButtonObject.GetComponent<RectTransform>();
+        endButtonRect.anchorMin = new Vector2(1f, 1f);
+        endButtonRect.anchorMax = new Vector2(1f, 1f);
+        endButtonRect.pivot = new Vector2(1f, 1f);
+
+        var stopButton = CreateButton(canvasObject.transform, "Stop", stopButtonAnchoredPosition, StopTreatment);
+        stopButtonObject = stopButton.gameObject;
+        var stopButtonRect = stopButtonObject.GetComponent<RectTransform>();
+        stopButtonRect.anchorMin = new Vector2(1f, 1f);
+        stopButtonRect.anchorMax = new Vector2(1f, 1f);
+        stopButtonRect.pivot = new Vector2(1f, 1f);
+
+        var continueButton = CreateButton(canvasObject.transform, "Continue", continueButtonAnchoredPosition, ContinueTreatment);
+        continueButtonObject = continueButton.gameObject;
+        var continueButtonRect = continueButtonObject.GetComponent<RectTransform>();
+        continueButtonRect.anchorMin = new Vector2(1f, 1f);
+        continueButtonRect.anchorMax = new Vector2(1f, 1f);
+        continueButtonRect.pivot = new Vector2(1f, 1f);
+        continueButtonRect.sizeDelta = new Vector2(120f, 36f);
     }
 
     private void ShowOptions(bool visible)
@@ -459,7 +514,7 @@ public class BedFocusCameraController : MonoBehaviour
             return;
         }
 
-        RestoreDetailObject(focusedDetailObject, transitionSeconds);
+        RestoreDetailObject(focusedDetailObject, 0f);
         focusedDetailObject = null;
         focusedStoryText = null;
     }
@@ -486,6 +541,30 @@ public class BedFocusCameraController : MonoBehaviour
         DetailTransformSnapshot restoreSnapshot,
         float seconds)
     {
+        if (seconds <= 0f)
+        {
+            if (detailMoveRoutine != null)
+            {
+                StopCoroutine(detailMoveRoutine);
+                detailMoveRoutine = null;
+            }
+
+            if (restoreLocalAtEnd)
+            {
+                detailObject.localPosition = restoreSnapshot.LocalPosition;
+                detailObject.localRotation = restoreSnapshot.LocalRotation;
+                detailObject.localScale = restoreSnapshot.LocalScale;
+            }
+            else
+            {
+                detailObject.position = targetPosition;
+                detailObject.rotation = targetRotation;
+                detailObject.localScale = targetLocalScale;
+            }
+
+            return;
+        }
+
         if (detailMoveRoutine != null)
         {
             StopCoroutine(detailMoveRoutine);
@@ -617,6 +696,56 @@ public class BedFocusCameraController : MonoBehaviour
         if (focusedStoryText != null)
         {
             focusedStoryText.gameObject.SetActive(visible);
+        }
+    }
+
+    private void EndCurrentDecision()
+    {
+        storySystem = storySystem != null ? storySystem : PatientStorySystem.EnsureExists();
+        storySystem.EndCurrentDecision();
+        RefreshFocusedStoryText();
+        RefreshStoryHud();
+    }
+
+    private void StopTreatment()
+    {
+        storySystem = storySystem != null ? storySystem : PatientStorySystem.EnsureExists();
+        storySystem.StopTreatment();
+        RefreshFocusedStoryText();
+        RefreshStoryHud();
+    }
+
+    private void ContinueTreatment()
+    {
+        storySystem = storySystem != null ? storySystem : PatientStorySystem.EnsureExists();
+        storySystem.ContinueTreatment();
+        RefreshFocusedStoryText();
+        RefreshStoryHud();
+    }
+
+    private void RefreshStoryHud()
+    {
+        if (timerText == null)
+        {
+            return;
+        }
+
+        storySystem = storySystem != null ? storySystem : PatientStorySystem.EnsureExists();
+        timerText.text = storySystem.PromptText;
+
+        if (endDecisionButtonObject != null)
+        {
+            endDecisionButtonObject.SetActive(storySystem.CanEndDecision);
+        }
+
+        if (stopButtonObject != null)
+        {
+            stopButtonObject.SetActive(storySystem.CanStopTreatment);
+        }
+
+        if (continueButtonObject != null)
+        {
+            continueButtonObject.SetActive(storySystem.CanContinueTreatment);
         }
     }
 }

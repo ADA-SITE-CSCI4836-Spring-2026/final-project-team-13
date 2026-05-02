@@ -39,6 +39,20 @@ public class BedPatientSlot : MonoBehaviour
     private void RefreshTreatmentAnimator()
     {
         treatmentAnimator = PatientMount.GetComponentInChildren<PatientTreatmentAnimator>();
+        if (treatmentAnimator != null)
+        {
+            return;
+        }
+
+        var animator = PatientMount.GetComponentInChildren<Animator>();
+        if (animator != null)
+        {
+            treatmentAnimator = animator.GetComponent<PatientTreatmentAnimator>();
+            if (treatmentAnimator == null)
+            {
+                treatmentAnimator = animator.gameObject.AddComponent<PatientTreatmentAnimator>();
+            }
+        }
     }
 
     public void ApplyTreatment(TreatmentType treatment)
