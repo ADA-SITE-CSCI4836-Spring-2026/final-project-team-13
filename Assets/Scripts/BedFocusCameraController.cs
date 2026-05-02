@@ -13,8 +13,13 @@ public class BedFocusCameraController : MonoBehaviour
     [SerializeField] private float focusHeight = 50f;
     [SerializeField] private float focusWorldZOffset = -10f;
     [SerializeField] private float focusFieldOfView = 38f;
-    [SerializeField] private Vector2 optionsPanelAnchoredPosition = new Vector2(-24f, 24f);
+    [SerializeField] private Vector2 backButtonAnchoredPosition = new Vector2(24f, -24f);
     [SerializeField] private bool buildOptionsUi = true;
+    [SerializeField] private bool moveFocusDetailObject = true;
+    [SerializeField] private string focusDetailObjectName = "tabletpen";
+    [SerializeField] private Vector3 focusDetailCameraLocalPosition = new Vector3(5.5f, -2f, 13f);
+    [SerializeField] private float focusDetailScaleMultiplier = 1.35f;
+    [SerializeField] private Vector3 focusDetailFaceCameraEulerOffset = new Vector3(0f, 0f, -113.5f);
 
     private readonly List<FocusTarget> focusTargets = new List<FocusTarget>();
     private Coroutine moveRoutine;
@@ -22,14 +27,23 @@ public class BedFocusCameraController : MonoBehaviour
     private Quaternion overviewRotation;
     private float overviewFieldOfView;
     private Transform focusedBed;
+    private Transform focusedDetailObject;
     private BedPatientSlot focusedPatientSlot;
     private GameObject optionsPanel;
-    private Text optionsTitle;
+    private Coroutine detailMoveRoutine;
+    private readonly Dictionary<Transform, DetailTransformSnapshot> detailSnapshots = new Dictionary<Transform, DetailTransformSnapshot>();
 
     private struct FocusTarget
     {
         public Transform Root;
         public string Label;
+    }
+
+    private struct DetailTransformSnapshot
+    {
+        public Vector3 LocalPosition;
+        public Quaternion LocalRotation;
+        public Vector3 LocalScale;
     }
 
     private void Awake()
@@ -202,12 +216,13 @@ public class BedFocusCameraController : MonoBehaviour
         var targetRotation = Quaternion.LookRotation(lookTarget - basePosition, Vector3.up);
 
         MoveCamera(targetPosition, targetRotation, focusFieldOfView);
-        SetOptionsTitle(target.Label);
+        MoveDetailObjectToFocusedPose(target.Root, targetPosition, targetRotation);
         ShowOptions(true);
     }
 
     public void ReturnToOverview()
     {
+        ReturnFocusedDetailObject();
         focusedBed = null;
         focusedPatientSlot = null;
         MoveCamera(overviewPosition, overviewRotation, overviewFieldOfView);
@@ -321,41 +336,8 @@ public class BedFocusCameraController : MonoBehaviour
         canvasObject.AddComponent<CanvasScaler>();
         canvasObject.AddComponent<GraphicRaycaster>();
 
-        optionsPanel = new GameObject("Bed Options Panel");
-        optionsPanel.transform.SetParent(canvasObject.transform, false);
-
-        var image = optionsPanel.AddComponent<Image>();
-        image.color = new Color(0.08f, 0.09f, 0.1f, 0.88f);
-
-        var rect = optionsPanel.GetComponent<RectTransform>();
-        rect.anchorMin = new Vector2(1f, 0f);
-        rect.anchorMax = new Vector2(1f, 0f);
-        rect.pivot = new Vector2(1f, 0f);
-        rect.anchoredPosition = optionsPanelAnchoredPosition;
-        rect.sizeDelta = new Vector2(260f, 318f);
-
-        optionsTitle = CreateText(optionsPanel.transform, "Selected Bed", 18, FontStyle.Bold);
-        var titleRect = optionsTitle.GetComponent<RectTransform>();
-        titleRect.anchorMin = new Vector2(0f, 1f);
-        titleRect.anchorMax = new Vector2(1f, 1f);
-        titleRect.pivot = new Vector2(0.5f, 1f);
-        titleRect.anchoredPosition = new Vector2(0f, -16f);
-        titleRect.sizeDelta = new Vector2(-28f, 32f);
-
-        CreateButton(optionsPanel.transform, "Inspect", new Vector2(0f, -64f), () => ApplyFocusedTreatment(TreatmentType.Inspect));
-        CreateButton(optionsPanel.transform, "Medication", new Vector2(0f, -106f), () => ApplyFocusedTreatment(TreatmentType.Medication));
-        CreateButton(optionsPanel.transform, "Surgery", new Vector2(0f, -148f), () => ApplyFocusedTreatment(TreatmentType.Surgery));
-        CreateButton(optionsPanel.transform, "Shock", new Vector2(0f, -190f), () => ApplyFocusedTreatment(TreatmentType.Shock));
-        CreateButton(optionsPanel.transform, "Rest", new Vector2(0f, -232f), () => ApplyFocusedTreatment(TreatmentType.Rest));
-        CreateButton(optionsPanel.transform, "Back", new Vector2(0f, -274f), ReturnToOverview);
-    }
-
-    private void SetOptionsTitle(string bedName)
-    {
-        if (optionsTitle != null)
-        {
-            optionsTitle.text = bedName;
-        }
+        var backButton = CreateButton(canvasObject.transform, "Back", backButtonAnchoredPosition, ReturnToOverview);
+        optionsPanel = backButton.gameObject;
     }
 
     private void ShowOptions(bool visible)
@@ -396,10 +378,10 @@ public class BedFocusCameraController : MonoBehaviour
 
         var rect = buttonObject.GetComponent<RectTransform>();
         rect.anchorMin = new Vector2(0f, 1f);
-        rect.anchorMax = new Vector2(1f, 1f);
-        rect.pivot = new Vector2(0.5f, 1f);
+        rect.anchorMax = new Vector2(0f, 1f);
+        rect.pivot = new Vector2(0f, 1f);
         rect.anchoredPosition = anchoredPosition;
-        rect.sizeDelta = new Vector2(-28f, 34f);
+        rect.sizeDelta = new Vector2(104f, 36f);
 
         var text = CreateText(buttonObject.transform, label, 14, FontStyle.Normal);
         text.alignment = TextAnchor.MiddleCenter;
@@ -410,5 +392,163 @@ public class BedFocusCameraController : MonoBehaviour
         textRect.offsetMax = Vector2.zero;
 
         return button;
+    }
+
+    private void MoveDetailObjectToFocusedPose(Transform focusRoot, Vector3 cameraTargetPosition, Quaternion cameraTargetRotation)
+    {
+        if (!moveFocusDetailObject || string.IsNullOrWhiteSpace(focusDetailObjectName))
+        {
+            return;
+        }
+
+        var previousDetailObject = focusedDetailObject;
+        var detailObject = FindFocusDetailObject(focusRoot);
+        if (previousDetailObject != null && previousDetailObject != detailObject)
+        {
+            RestoreDetailObject(previousDetailObject, transitionSeconds);
+        }
+
+        if (detailObject == null)
+        {
+            focusedDetailObject = null;
+            return;
+        }
+
+        focusedDetailObject = detailObject;
+
+        if (!detailSnapshots.ContainsKey(detailObject))
+        {
+            detailSnapshots.Add(detailObject, new DetailTransformSnapshot
+            {
+                LocalPosition = detailObject.localPosition,
+                LocalRotation = detailObject.localRotation,
+                LocalScale = detailObject.localScale
+            });
+        }
+
+        var snapshot = detailSnapshots[detailObject];
+        var targetPosition = cameraTargetPosition + cameraTargetRotation * focusDetailCameraLocalPosition;
+        var targetRotation = Quaternion.LookRotation(cameraTargetPosition - targetPosition, Vector3.up) *
+            Quaternion.Euler(focusDetailFaceCameraEulerOffset);
+        var targetLocalScale = snapshot.LocalScale * focusDetailScaleMultiplier;
+
+        MoveDetailObject(detailObject, targetPosition, targetRotation, targetLocalScale, false, snapshot, transitionSeconds);
+    }
+
+    private void ReturnFocusedDetailObject()
+    {
+        if (focusedDetailObject == null)
+        {
+            return;
+        }
+
+        RestoreDetailObject(focusedDetailObject, transitionSeconds);
+        focusedDetailObject = null;
+    }
+
+    private void RestoreDetailObject(Transform detailObject, float seconds)
+    {
+        if (detailObject == null || !detailSnapshots.TryGetValue(detailObject, out var snapshot))
+        {
+            return;
+        }
+
+        var targetPosition = detailObject.parent != null ? detailObject.parent.TransformPoint(snapshot.LocalPosition) : snapshot.LocalPosition;
+        var targetRotation = detailObject.parent != null ? detailObject.parent.rotation * snapshot.LocalRotation : snapshot.LocalRotation;
+
+        MoveDetailObject(detailObject, targetPosition, targetRotation, snapshot.LocalScale, true, snapshot, seconds);
+    }
+
+    private void MoveDetailObject(
+        Transform detailObject,
+        Vector3 targetPosition,
+        Quaternion targetRotation,
+        Vector3 targetLocalScale,
+        bool restoreLocalAtEnd,
+        DetailTransformSnapshot restoreSnapshot,
+        float seconds)
+    {
+        if (detailMoveRoutine != null)
+        {
+            StopCoroutine(detailMoveRoutine);
+        }
+
+        detailMoveRoutine = StartCoroutine(MoveDetailObjectRoutine(
+            detailObject,
+            targetPosition,
+            targetRotation,
+            targetLocalScale,
+            restoreLocalAtEnd,
+            restoreSnapshot,
+            seconds));
+    }
+
+    private IEnumerator MoveDetailObjectRoutine(
+        Transform detailObject,
+        Vector3 targetPosition,
+        Quaternion targetRotation,
+        Vector3 targetLocalScale,
+        bool restoreLocalAtEnd,
+        DetailTransformSnapshot restoreSnapshot,
+        float seconds)
+    {
+        var startPosition = detailObject.position;
+        var startRotation = detailObject.rotation;
+        var startLocalScale = detailObject.localScale;
+        var elapsed = 0f;
+
+        while (elapsed < seconds)
+        {
+            if (detailObject == null)
+            {
+                detailMoveRoutine = null;
+                yield break;
+            }
+
+            elapsed += Time.deltaTime;
+            var t = seconds <= 0f ? 1f : Mathf.Clamp01(elapsed / seconds);
+            t = t * t * (3f - 2f * t);
+
+            detailObject.position = Vector3.Lerp(startPosition, targetPosition, t);
+            detailObject.rotation = Quaternion.Slerp(startRotation, targetRotation, t);
+            detailObject.localScale = Vector3.Lerp(startLocalScale, targetLocalScale, t);
+
+            yield return null;
+        }
+
+        if (restoreLocalAtEnd)
+        {
+            detailObject.localPosition = restoreSnapshot.LocalPosition;
+            detailObject.localRotation = restoreSnapshot.LocalRotation;
+            detailObject.localScale = restoreSnapshot.LocalScale;
+        }
+        else
+        {
+            detailObject.position = targetPosition;
+            detailObject.rotation = targetRotation;
+            detailObject.localScale = targetLocalScale;
+        }
+
+        detailMoveRoutine = null;
+    }
+
+    private Transform FindFocusDetailObject(Transform focusRoot)
+    {
+        var searchRoot = focusRoot;
+        var patientSlot = focusRoot.GetComponentInParent<BedPatientSlot>();
+        if (patientSlot != null)
+        {
+            searchRoot = patientSlot.transform;
+        }
+
+        foreach (var child in searchRoot.GetComponentsInChildren<Transform>(true))
+        {
+            if (child.name == focusDetailObjectName)
+            {
+                return child;
+            }
+        }
+
+        return null;
     }
 }
