@@ -1,11 +1,5 @@
-Shader "Custom/InteractableOutline"
+Shader "Custom/InteractableOutlineMask"
 {
-    Properties
-    {
-        _OutlineColor ("Outline Color", Color) = (1, 0.35, 0, 1)
-        _OutlineWidth ("Outline Width", Float) = 0.04
-    }
-
     SubShader
     {
         Tags
@@ -14,11 +8,19 @@ Shader "Custom/InteractableOutline"
             "RenderType" = "Transparent"
         }
 
+        ZWrite Off
+        ZTest LEqual
+        Cull Off
+        ColorMask 0
+
         Pass
         {
-            Cull Front
-            ZWrite Off
-            ZTest LEqual
+            Stencil
+            {
+                Ref 1
+                Comp Always
+                Pass Replace
+            }
 
             CGPROGRAM
             #pragma vertex vert
@@ -26,31 +28,30 @@ Shader "Custom/InteractableOutline"
 
             #include "UnityCG.cginc"
 
-            fixed4 _OutlineColor;
-            float _OutlineWidth;
-
             struct appdata
             {
                 float4 vertex : POSITION;
-                float3 normal : NORMAL;
+                UNITY_VERTEX_INPUT_INSTANCE_ID
             };
 
             struct v2f
             {
                 float4 pos : SV_POSITION;
+                UNITY_VERTEX_OUTPUT_STEREO
             };
 
             v2f vert(appdata v)
             {
                 v2f o;
-                v.vertex.xyz += normalize(v.normal) * _OutlineWidth;
+                UNITY_SETUP_INSTANCE_ID(v);
+                UNITY_INITIALIZE_VERTEX_OUTPUT_STEREO(o);
                 o.pos = UnityObjectToClipPos(v.vertex);
                 return o;
             }
 
             fixed4 frag(v2f i) : SV_Target
             {
-                return _OutlineColor;
+                return 0;
             }
             ENDCG
         }

@@ -41,7 +41,7 @@ public static class GameResultOverlay
         var backgroundObject = new GameObject("Result Background");
         backgroundObject.transform.SetParent(canvasObject.transform, false);
         var background = backgroundObject.AddComponent<Image>();
-        background.color = new Color(0f, 0f, 0f, 0.96f);
+        background.color = new Color(0f, 0f, 0f, 0.92f);
 
         var backgroundRect = background.GetComponent<RectTransform>();
         backgroundRect.anchorMin = Vector2.zero;

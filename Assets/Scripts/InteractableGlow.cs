@@ -6,11 +6,13 @@ public sealed class InteractableGlow : MonoBehaviour
 {
     private static readonly List<InteractableGlow> ActiveGlows = new List<InteractableGlow>();
 
-    [SerializeField] private Color glowColor = Color.white;
-    [SerializeField] private float outlineScale = 1.04f;
+    [SerializeField] private Color glowColor = new Color(1f, 0.35f, 0f, 1f);
+    [SerializeField, Range(0f, 10f)] private float outlineWidth = 1f;
     [SerializeField] private bool hideWhileBedFocused;
 
     private readonly List<GameObject> outlines = new List<GameObject>();
+    private Material maskMaterial;
+    private Material outlineMaterial;
     private Interactable interactable;
 
     public bool HideWhileBedFocused
@@ -47,10 +49,13 @@ public sealed class InteractableGlow : MonoBehaviour
     private void OnDestroy()
     {
         ActiveGlows.Remove(this);
+        DestroyMaterial(maskMaterial);
+        DestroyMaterial(outlineMaterial);
     }
 
     private void LateUpdate()
     {
+        RefreshMaterialProperties();
         RefreshVisibility();
     }
 
@@ -103,42 +108,85 @@ public sealed class InteractableGlow : MonoBehaviour
 
     private void BuildOutlines()
     {
-        var shader = Shader.Find("Custom/InteractableOutline");
-        if (shader == null)
+        var maskShader = LoadOutlineShader("Shaders/InteractableOutlineMask", "Custom/InteractableOutlineMask");
+        var outlineShader = LoadOutlineShader("Shaders/InteractableOutline", "Custom/InteractableOutline");
+        if (maskShader == null || outlineShader == null)
         {
-            shader = Shader.Find("Unlit/Color");
+            return;
         }
+
+        maskMaterial = new Material(maskShader);
+        maskMaterial.renderQueue = 2999;
+
+        outlineMaterial = CreateGlowMaterial(outlineShader);
 
         var renderers = GetComponentsInChildren<MeshRenderer>(true);
         foreach (var sourceRenderer in renderers)
         {
+            if (sourceRenderer.GetComponentInParent<InteractableGlow>() != this)
+            {
+                continue;
+            }
+
             var sourceFilter = sourceRenderer.GetComponent<MeshFilter>();
             if (sourceFilter == null || sourceFilter.sharedMesh == null)
             {
                 continue;
             }
 
-            var outlineObject = new GameObject(sourceRenderer.gameObject.name + " White Glow");
-            outlineObject.transform.SetParent(sourceRenderer.transform, false);
-            outlineObject.transform.localPosition = Vector3.zero;
-            outlineObject.transform.localRotation = Quaternion.identity;
-            outlineObject.transform.localScale = Vector3.one * outlineScale;
-
-            var filter = outlineObject.AddComponent<MeshFilter>();
-            filter.sharedMesh = sourceFilter.sharedMesh;
-
-            var renderer = outlineObject.AddComponent<MeshRenderer>();
-            renderer.sharedMaterial = CreateGlowMaterial(shader);
-            renderer.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
-            renderer.receiveShadows = false;
-
-            outlines.Add(outlineObject);
+            CreateOutlineObject(sourceRenderer, sourceFilter.sharedMesh, " Outline Mask", maskMaterial);
+            CreateOutlineObject(sourceRenderer, sourceFilter.sharedMesh, " Outline", outlineMaterial);
         }
+    }
+
+    private static Shader LoadOutlineShader(string resourcesPath, string shaderName)
+    {
+        var shader = Resources.Load<Shader>(resourcesPath);
+        return shader != null ? shader : Shader.Find(shaderName);
+    }
+
+    private void CreateOutlineObject(MeshRenderer sourceRenderer, Mesh mesh, string suffix, Material material)
+    {
+        var outlineObject = new GameObject(sourceRenderer.gameObject.name + suffix);
+        outlineObject.transform.SetParent(sourceRenderer.transform, false);
+        outlineObject.transform.localPosition = Vector3.zero;
+        outlineObject.transform.localRotation = Quaternion.identity;
+        outlineObject.transform.localScale = Vector3.one;
+
+        var filter = outlineObject.AddComponent<MeshFilter>();
+        filter.sharedMesh = mesh;
+
+        var renderer = outlineObject.AddComponent<MeshRenderer>();
+        renderer.sharedMaterials = CreateMaterialArray(material, mesh.subMeshCount);
+        renderer.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+        renderer.receiveShadows = false;
+
+        outlines.Add(outlineObject);
     }
 
     private Material CreateGlowMaterial(Shader shader)
     {
         var material = new Material(shader);
+        ApplyGlowMaterialProperties(material);
+        material.renderQueue = 3000;
+        return material;
+    }
+
+    private void RefreshMaterialProperties()
+    {
+        if (outlineMaterial != null)
+        {
+            ApplyGlowMaterialProperties(outlineMaterial);
+        }
+    }
+
+    private void ApplyGlowMaterialProperties(Material material)
+    {
+        if (material == null)
+        {
+            return;
+        }
+
         if (material.HasProperty("_OutlineColor"))
         {
             material.SetColor("_OutlineColor", glowColor);
@@ -151,11 +199,37 @@ public sealed class InteractableGlow : MonoBehaviour
 
         if (material.HasProperty("_OutlineWidth"))
         {
-            material.SetFloat("_OutlineWidth", 0.035f);
+            material.SetFloat("_OutlineWidth", outlineWidth);
+        }
+    }
+
+    private static Material[] CreateMaterialArray(Material material, int count)
+    {
+        var materialCount = Mathf.Max(1, count);
+        var materials = new Material[materialCount];
+        for (var i = 0; i < materials.Length; i++)
+        {
+            materials[i] = material;
         }
 
-        material.renderQueue = 3000;
-        return material;
+        return materials;
+    }
+
+    private static void DestroyMaterial(Material material)
+    {
+        if (material == null)
+        {
+            return;
+        }
+
+        if (Application.isPlaying)
+        {
+            UnityEngine.Object.Destroy(material);
+        }
+        else
+        {
+            UnityEngine.Object.DestroyImmediate(material);
+        }
     }
 
     private void SetVisible(bool visible)
