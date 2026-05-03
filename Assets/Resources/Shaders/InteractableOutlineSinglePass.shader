@@ -1,4 +1,4 @@
-Shader "Custom/InteractableOutline"
+Shader "Custom/InteractableOutlineSinglePass"
 {
     Properties
     {
@@ -16,18 +16,11 @@ Shader "Custom/InteractableOutline"
 
         ZWrite Off
         ZTest LEqual
-        Cull Off
+        Cull Front
         Blend SrcAlpha OneMinusSrcAlpha
 
         Pass
         {
-            Stencil
-            {
-                Ref 1
-                Comp NotEqual
-                Pass Keep
-            }
-
             CGPROGRAM
             #pragma vertex vert
             #pragma fragment frag

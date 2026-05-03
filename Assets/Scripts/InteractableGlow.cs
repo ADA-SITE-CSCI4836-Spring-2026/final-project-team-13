@@ -7,7 +7,6 @@ public sealed class InteractableGlow : MonoBehaviour
     private static readonly List<InteractableGlow> ActiveGlows = new List<InteractableGlow>();
 
     [SerializeField] private Color glowColor = new Color(1f, 0.35f, 0f, 1f);
-    [SerializeField, Range(0f, 10f)] private float outlineWidth = 1f;
     [SerializeField] private bool hideWhileBedFocused;
 
     private readonly List<GameObject> outlines = new List<GameObject>();
@@ -108,15 +107,24 @@ public sealed class InteractableGlow : MonoBehaviour
 
     private void BuildOutlines()
     {
-        var maskShader = LoadOutlineShader("Shaders/InteractableOutlineMask", "Custom/InteractableOutlineMask");
-        var outlineShader = LoadOutlineShader("Shaders/InteractableOutline", "Custom/InteractableOutline");
-        if (maskShader == null || outlineShader == null)
+        var useStencilOutline = ShouldUseStencilOutline();
+        var outlineShader = useStencilOutline
+            ? LoadOutlineShader("Shaders/InteractableOutline", "Custom/InteractableOutline")
+            : LoadOutlineShader("Shaders/InteractableOutlineSinglePass", "Custom/InteractableOutlineSinglePass");
+        var maskShader = useStencilOutline
+            ? LoadOutlineShader("Shaders/InteractableOutlineMask", "Custom/InteractableOutlineMask")
+            : null;
+
+        if (outlineShader == null || (useStencilOutline && maskShader == null))
         {
             return;
         }
 
-        maskMaterial = new Material(maskShader);
-        maskMaterial.renderQueue = 2999;
+        if (useStencilOutline)
+        {
+            maskMaterial = new Material(maskShader);
+            maskMaterial.renderQueue = 2999;
+        }
 
         outlineMaterial = CreateGlowMaterial(outlineShader);
 
@@ -134,9 +142,22 @@ public sealed class InteractableGlow : MonoBehaviour
                 continue;
             }
 
-            CreateOutlineObject(sourceRenderer, sourceFilter.sharedMesh, " Outline Mask", maskMaterial);
+            if (useStencilOutline)
+            {
+                CreateOutlineObject(sourceRenderer, sourceFilter.sharedMesh, " Outline Mask", maskMaterial);
+            }
+
             CreateOutlineObject(sourceRenderer, sourceFilter.sharedMesh, " Outline", outlineMaterial);
         }
+    }
+
+    private static bool ShouldUseStencilOutline()
+    {
+#if UNITY_WEBGL
+        return false;
+#else
+        return true;
+#endif
     }
 
     private static Shader LoadOutlineShader(string resourcesPath, string shaderName)
@@ -199,7 +220,7 @@ public sealed class InteractableGlow : MonoBehaviour
 
         if (material.HasProperty("_OutlineWidth"))
         {
-            material.SetFloat("_OutlineWidth", outlineWidth);
+            material.SetFloat("_OutlineWidth", InteractableOutlineSettings.OutlineWidth);
         }
     }
 
