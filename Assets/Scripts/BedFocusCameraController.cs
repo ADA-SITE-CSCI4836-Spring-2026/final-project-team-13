@@ -26,7 +26,7 @@ public class BedFocusCameraController : MonoBehaviour
     [SerializeField] private float focusDetailScaleMultiplier = 1.35f;
     [SerializeField] private Vector3 focusDetailFaceCameraEulerOffset = new Vector3(0f, 0f, -113.5f);
     [SerializeField] private bool showStoryTextOnTablet = true;
-    [SerializeField] private Vector3 tabletTextLocalPosition = new Vector3(-0.02f, 0.02f, 0.05f);
+    [SerializeField] private Vector3 tabletTextLocalPosition = new Vector3(-0.04f, 0.02f, 0.05f);
     [SerializeField] private Vector3 tabletTextLocalEulerAngles = new Vector3(0f, 180f, -90f);
     [SerializeField] private Vector3 tabletTextLocalScale = new Vector3(0.02f, 0.02f, 0.02f);
     [SerializeField] private float tabletTextCharacterSize = 0.12f;
@@ -38,7 +38,7 @@ public class BedFocusCameraController : MonoBehaviour
     [SerializeField] private float tabletReadingLightRange = 8f;
     [SerializeField] private Color tabletReadingLightColor = new Color(1f, 0.96f, 0.86f, 1f);
     [SerializeField] private bool addTabletTextBacking = true;
-    [SerializeField] private Vector3 tabletTextBackingLocalPosition = new Vector3(1.55f, -1.65f, 0.05f);
+    [SerializeField] private Vector3 tabletTextBackingLocalPosition = new Vector3(1.85f, -1.65f, 0.08f);
     [SerializeField] private Vector3 tabletTextBackingLocalScale = new Vector3(10f, 7f, 1f);
     [SerializeField] private Color tabletTextBackingColor = new Color(0.94f, 0.92f, 0.84f, 1f);
 
@@ -820,8 +820,8 @@ public class BedFocusCameraController : MonoBehaviour
     private void ConfigureTabletStoryText(TextMesh text)
     {
         text.richText = true;
-        text.anchor = TextAnchor.MiddleCenter;
-        text.alignment = TextAlignment.Center;
+        text.anchor = TextAnchor.UpperLeft;
+        text.alignment = TextAlignment.Left;
         text.characterSize = tabletTextCharacterSize;
         text.fontSize = tabletTextFontSize;
         text.color = tabletTextColor;
