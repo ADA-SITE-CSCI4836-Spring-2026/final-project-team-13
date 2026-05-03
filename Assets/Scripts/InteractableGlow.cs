@@ -77,25 +77,28 @@ public sealed class InteractableGlow : MonoBehaviour
 
     private void RefreshVisibility()
     {
-        var shouldShow = interactable != null && interactable.IsHovered;
-        if (shouldShow && hideWhileBedFocused && IsAnyBedFocused())
-        {
-            shouldShow = false;
-        }
-
+        var shouldShow = interactable != null && interactable.IsHovered && IsGameplayOverviewActive();
         SetVisible(shouldShow);
     }
 
-    private static bool IsAnyBedFocused()
+    private static bool IsGameplayOverviewActive()
     {
-        var camera = Camera.main;
-        if (camera == null)
+        if (GameObject.Find("Game Result Canvas") != null ||
+            GameObject.Find("Main Menu Canvas") != null ||
+            GameObject.Find("Intro Canvas") != null ||
+            GameObject.Find("Pause Menu Canvas") != null)
         {
             return false;
         }
 
+        var camera = Camera.main;
+        if (camera == null)
+        {
+            return true;
+        }
+
         var controller = camera.GetComponent<BedFocusCameraController>();
-        return controller != null && !controller.CanFocusFromWorldClick;
+        return controller == null || controller.CanFocusFromWorldClick;
     }
 
     private void BuildOutlines()

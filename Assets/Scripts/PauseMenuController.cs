@@ -49,6 +49,8 @@ public sealed class PauseMenuController : MonoBehaviour
     public void Pause()
     {
         isPaused = true;
+        BackgroundMusic.StopCurrent();
+        InteractableGlow.ClearAll();
         Time.timeScale = 0f;
         SetVisible(true);
     }
@@ -58,10 +60,12 @@ public sealed class PauseMenuController : MonoBehaviour
         isPaused = false;
         Time.timeScale = 1f;
         SetVisible(false);
+        BackgroundMusic.PlayCurrent();
     }
 
     private void Restart()
     {
+        BackgroundMusic.StopCurrent();
         Time.timeScale = 1f;
         IntroSceneController.RestartAfterMainMenuSkip();
         SceneManager.LoadScene(SceneManager.GetActiveScene().buildIndex);
@@ -69,6 +73,7 @@ public sealed class PauseMenuController : MonoBehaviour
 
     private void MainMenu()
     {
+        BackgroundMusic.StopCurrent();
         Time.timeScale = 1f;
         SceneManager.LoadScene(SceneManager.GetActiveScene().buildIndex);
     }
