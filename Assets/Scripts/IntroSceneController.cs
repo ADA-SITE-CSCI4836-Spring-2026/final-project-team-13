@@ -197,6 +197,14 @@ public sealed class IntroSceneController : MonoBehaviour
         titleRect.offsetMin = Vector2.zero;
         titleRect.offsetMax = Vector2.zero;
 
+        var subtitle = CreateText(menuCanvasObject.transform, "Time is your enemy. Or is it?...", 32, FontStyle.Italic);
+        subtitle.alignment = TextAnchor.MiddleCenter;
+        var subtitleRect = subtitle.GetComponent<RectTransform>();
+        subtitleRect.anchorMin = new Vector2(0.18f, 0.58f);
+        subtitleRect.anchorMax = new Vector2(0.82f, 0.66f);
+        subtitleRect.offsetMin = Vector2.zero;
+        subtitleRect.offsetMax = Vector2.zero;
+
         PlaceMenuButton(CreateButton(menuCanvasObject.transform, "Start Game", StartIntro), 0f, 0.48f);
         PlaceMenuButton(CreateButton(menuCanvasObject.transform, "Instructions", ShowInstructions), 0f, 0.38f);
         PlaceMenuButton(CreateButton(menuCanvasObject.transform, "Quit", QuitGame), 0f, 0.28f);
