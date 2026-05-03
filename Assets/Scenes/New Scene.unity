@@ -438,7 +438,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   musicClip: {fileID: 0}
   volume: 0.35
-  playOnStart: 1
+  playOnStart: 0
   persistBetweenScenes: 1
 --- !u!1001 &1648903136
 PrefabInstance:

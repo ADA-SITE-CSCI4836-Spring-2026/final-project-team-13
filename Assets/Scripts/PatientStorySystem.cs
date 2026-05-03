@@ -101,10 +101,6 @@ public class PatientStorySystem : MonoBehaviour
     public int ShockPresses => shockPresses;
     public float TimeRemaining => IsTimerRunning ? Mathf.Max(0f, timer) : 0f;
     public bool StoryComplete => phase == StoryPhase.Won || phase == StoryPhase.Lost;
-    public bool CanEndDecision =>
-        phase == StoryPhase.AwaitingFirstShock ||
-        phase == StoryPhase.AwaitingSecondShock ||
-        phase == StoryPhase.AwaitingFinalShock;
     public bool CanStopTreatment => phase == StoryPhase.ChooseAfterFirstShock || phase == StoryPhase.ChooseAfterSecondShock;
     public bool CanContinueTreatment => phase == StoryPhase.ChooseAfterFirstShock || phase == StoryPhase.ChooseAfterSecondShock;
     public bool IsTimerRunning =>
@@ -120,7 +116,7 @@ public class PatientStorySystem : MonoBehaviour
         {
             if (phase == StoryPhase.ChooseAfterFirstShock)
             {
-                return "Stop or continue? You can save 2 people, or risk it. hit the button. Time: " + Mathf.CeilToInt(TimeRemaining) + "s";
+                return "Stop or continue? You can save 2 people, or risk it. Time: " + Mathf.CeilToInt(TimeRemaining) + "s";
             }
 
             if (phase == StoryPhase.AwaitingSecondShock)
@@ -150,10 +146,10 @@ public class PatientStorySystem : MonoBehaviour
 
             if (!timerStarted)
             {
-                return "Time starts after the intro.";
+                return string.Empty;
             }
 
-            return "Time: " + Mathf.CeilToInt(TimeRemaining) + "s";
+            return "Press the button. Time: " + Mathf.CeilToInt(TimeRemaining) + "s";
         }
     }
 
@@ -273,7 +269,7 @@ public class PatientStorySystem : MonoBehaviour
         var lines = patient.GetLines(stage, shockPresses);
         var builder = new StringBuilder();
 
-        builder.AppendLine(patient.Name);
+        builder.AppendLine("<b>" + patient.Name + "</b>");
         builder.AppendLine();
         foreach (var line in lines)
         {
@@ -282,19 +278,6 @@ public class PatientStorySystem : MonoBehaviour
         }
 
         return builder.ToString();
-    }
-
-    public void EndCurrentDecision()
-    {
-        if (!timerStarted)
-        {
-            return;
-        }
-
-        if (IsTimerRunning)
-        {
-            AdvanceWithoutShock();
-        }
     }
 
     public void BeginStoryTimer()

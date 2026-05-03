@@ -16,16 +16,10 @@ public class InteractionCursor : MonoBehaviour
 
     private void Update()
     {
-        if (PointerIsOverUi())
-        {
-            SetHoveredInteractable(null);
-            return;
-        }
-
         var interactable = FindInteractableUnderCursor();
         SetHoveredInteractable(interactable);
 
-        if (interactable != null && Input.GetMouseButtonDown(0))
+        if (interactable != null && Input.GetMouseButtonDown(0) && !PointerIsOverUi())
         {
             interactable.Interact();
         }

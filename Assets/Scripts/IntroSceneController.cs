@@ -3,10 +3,15 @@ using UnityEngine;
 using UnityEngine.EventSystems;
 using UnityEngine.UI;
 
+#if UNITY_EDITOR
+using UnityEditor;
+#endif
+
 [DisallowMultipleComponent]
 public sealed class IntroSceneController : MonoBehaviour
 {
     private const string TickingClipPath = "Audio/tictac";
+    private const string SkipMainMenuKey = "OneLastSleep.SkipMainMenu";
 
     [SerializeField] private string[] introLines =
     {
@@ -30,25 +35,65 @@ public sealed class IntroSceneController : MonoBehaviour
     private CanvasGroup canvasGroup;
     private Text introText;
     private AudioSource tickingSource;
+    private GameObject menuCanvasObject;
+    private GameObject instructionsPanel;
+    private bool introPlaying;
     private bool skipRequested;
 
     private void Awake()
     {
-        BuildOverlay();
         ConfigureTickingAudio();
     }
 
     private void Start()
     {
-        StartCoroutine(PlayIntro());
+        Time.timeScale = 1f;
+
+        if (PlayerPrefs.GetInt(SkipMainMenuKey, 0) == 1)
+        {
+            PlayerPrefs.DeleteKey(SkipMainMenuKey);
+            StartIntro();
+            return;
+        }
+
+        BuildMainMenu();
     }
 
     private void Update()
     {
+        if (!introPlaying)
+        {
+            return;
+        }
+
         if (Input.GetKeyDown(skipKey) || Input.GetKeyDown(KeyCode.Return) || Input.GetMouseButtonDown(0))
         {
             skipRequested = true;
         }
+    }
+
+    public static void RestartAfterMainMenuSkip()
+    {
+        PlayerPrefs.SetInt(SkipMainMenuKey, 1);
+        PlayerPrefs.Save();
+    }
+
+    private void StartIntro()
+    {
+        if (introPlaying)
+        {
+            return;
+        }
+
+        if (menuCanvasObject != null)
+        {
+            Destroy(menuCanvasObject);
+        }
+
+        BackgroundMusic.PlayCurrent();
+        BuildOverlay();
+        introPlaying = true;
+        StartCoroutine(PlayIntro());
     }
 
     private IEnumerator PlayIntro()
@@ -72,6 +117,11 @@ public sealed class IntroSceneController : MonoBehaviour
             yield return FadeText(0f, 1f, fadeSeconds);
             yield return WaitOrSkip(i == introLines.Length - 1 ? finalHoldSeconds : holdSeconds);
             yield return FadeText(1f, 0f, fadeSeconds);
+        }
+
+        if (tickingSource != null)
+        {
+            tickingSource.Stop();
         }
 
         yield return FadeOverlay(1f, 0f, fadeSeconds);
@@ -120,6 +170,87 @@ public sealed class IntroSceneController : MonoBehaviour
         }
     }
 
+    private void BuildMainMenu()
+    {
+        EnsureEventSystem();
+
+        menuCanvasObject = new GameObject("Main Menu Canvas");
+        var canvas = menuCanvasObject.AddComponent<Canvas>();
+        canvas.renderMode = RenderMode.ScreenSpaceOverlay;
+        canvas.sortingOrder = 1000;
+
+        var scaler = menuCanvasObject.AddComponent<CanvasScaler>();
+        scaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
+        scaler.referenceResolution = new Vector2(1920f, 1080f);
+        scaler.matchWidthOrHeight = 0.5f;
+
+        menuCanvasObject.AddComponent<GraphicRaycaster>();
+
+        var background = CreatePanel(menuCanvasObject.transform, "Black Background", Color.black);
+        Stretch(background.GetComponent<RectTransform>());
+
+        var title = CreateText(menuCanvasObject.transform, "One Last Sleep", 76, FontStyle.Bold);
+        title.alignment = TextAnchor.MiddleCenter;
+        var titleRect = title.GetComponent<RectTransform>();
+        titleRect.anchorMin = new Vector2(0.18f, 0.62f);
+        titleRect.anchorMax = new Vector2(0.82f, 0.82f);
+        titleRect.offsetMin = Vector2.zero;
+        titleRect.offsetMax = Vector2.zero;
+
+        PlaceMenuButton(CreateButton(menuCanvasObject.transform, "Start Game", StartIntro), 0f, 0.48f);
+        PlaceMenuButton(CreateButton(menuCanvasObject.transform, "Instructions", ShowInstructions), 0f, 0.38f);
+        PlaceMenuButton(CreateButton(menuCanvasObject.transform, "Quit", QuitGame), 0f, 0.28f);
+        BuildInstructionsPanel();
+    }
+
+    private void BuildInstructionsPanel()
+    {
+        instructionsPanel = CreatePanel(menuCanvasObject.transform, "Instructions Panel", new Color(0f, 0f, 0f, 0.96f));
+        Stretch(instructionsPanel.GetComponent<RectTransform>());
+        instructionsPanel.SetActive(false);
+
+        var text = CreateText(
+            instructionsPanel.transform,
+            "Instructions\n\nRead the patient notes and analyze who is getting better or worse.\nPress the red button before time runs out.\nIn the next stages, decide whether to press again or stop based on the patient notes.\nChoose carefully: not every patient can be saved.",
+            36,
+            FontStyle.Bold);
+        text.alignment = TextAnchor.MiddleCenter;
+        text.horizontalOverflow = HorizontalWrapMode.Wrap;
+        text.verticalOverflow = VerticalWrapMode.Overflow;
+        var textRect = text.GetComponent<RectTransform>();
+        textRect.anchorMin = new Vector2(0.18f, 0.34f);
+        textRect.anchorMax = new Vector2(0.82f, 0.78f);
+        textRect.offsetMin = Vector2.zero;
+        textRect.offsetMax = Vector2.zero;
+
+        PlaceMenuButton(CreateButton(instructionsPanel.transform, "Back", HideInstructions), 0f, 0.22f);
+    }
+
+    private void ShowInstructions()
+    {
+        if (instructionsPanel != null)
+        {
+            instructionsPanel.SetActive(true);
+        }
+    }
+
+    private void HideInstructions()
+    {
+        if (instructionsPanel != null)
+        {
+            instructionsPanel.SetActive(false);
+        }
+    }
+
+    private void QuitGame()
+    {
+#if UNITY_EDITOR
+        EditorApplication.isPlaying = false;
+#else
+        Application.Quit();
+#endif
+    }
+
     private void BuildOverlay()
     {
         var canvasObject = new GameObject("Intro Canvas");
@@ -140,29 +271,14 @@ public sealed class IntroSceneController : MonoBehaviour
         canvasGroup.blocksRaycasts = true;
         canvasGroup.alpha = 1f;
 
-        var backgroundObject = new GameObject("Black Background");
-        backgroundObject.transform.SetParent(canvasObject.transform, false);
-        var background = backgroundObject.AddComponent<Image>();
-        background.color = backgroundColor;
+        var backgroundObject = CreatePanel(canvasObject.transform, "Black Background", backgroundColor);
+        Stretch(backgroundObject.GetComponent<RectTransform>());
 
-        var backgroundRect = background.GetComponent<RectTransform>();
-        backgroundRect.anchorMin = Vector2.zero;
-        backgroundRect.anchorMax = Vector2.one;
-        backgroundRect.offsetMin = Vector2.zero;
-        backgroundRect.offsetMax = Vector2.zero;
-
-        var textObject = new GameObject("Intro Text");
-        textObject.transform.SetParent(canvasObject.transform, false);
-        introText = textObject.AddComponent<Text>();
-        introText.text = string.Empty;
-        var font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
-        introText.font = font != null ? font : Resources.GetBuiltinResource<Font>("Arial.ttf");
-        introText.fontSize = fontSize;
-        introText.fontStyle = FontStyle.Bold;
+        introText = CreateText(canvasObject.transform, string.Empty, fontSize, FontStyle.Bold);
+        introText.color = new Color(textColor.r, textColor.g, textColor.b, 0f);
         introText.alignment = TextAnchor.MiddleCenter;
         introText.horizontalOverflow = HorizontalWrapMode.Wrap;
         introText.verticalOverflow = VerticalWrapMode.Overflow;
-        introText.color = new Color(textColor.r, textColor.g, textColor.b, 0f);
 
         var textRect = introText.GetComponent<RectTransform>();
         textRect.anchorMin = new Vector2(0.12f, 0.25f);
@@ -176,7 +292,7 @@ public sealed class IntroSceneController : MonoBehaviour
         skipRect.anchorMax = new Vector2(1f, 1f);
         skipRect.pivot = new Vector2(1f, 1f);
         skipRect.anchoredPosition = new Vector2(-24f, -24f);
-        skipRect.sizeDelta = new Vector2(110f, 42f);
+        skipRect.sizeDelta = new Vector2(120f, 48f);
     }
 
     private void ConfigureTickingAudio()
@@ -194,6 +310,30 @@ public sealed class IntroSceneController : MonoBehaviour
         skipRequested = true;
     }
 
+    private static GameObject CreatePanel(Transform parent, string name, Color color)
+    {
+        var panelObject = new GameObject(name);
+        panelObject.transform.SetParent(parent, false);
+        var image = panelObject.AddComponent<Image>();
+        image.color = color;
+        return panelObject;
+    }
+
+    private static Text CreateText(Transform parent, string label, int size, FontStyle style)
+    {
+        var textObject = new GameObject(label);
+        textObject.transform.SetParent(parent, false);
+        var text = textObject.AddComponent<Text>();
+        text.text = label;
+        var font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+        text.font = font != null ? font : Resources.GetBuiltinResource<Font>("Arial.ttf");
+        text.fontSize = size;
+        text.fontStyle = style;
+        text.alignment = TextAnchor.MiddleCenter;
+        text.color = Color.white;
+        return text;
+    }
+
     private static Button CreateButton(Transform parent, string label, UnityEngine.Events.UnityAction action)
     {
         var buttonObject = new GameObject(label);
@@ -205,24 +345,29 @@ public sealed class IntroSceneController : MonoBehaviour
         var button = buttonObject.AddComponent<Button>();
         button.onClick.AddListener(action);
 
-        var textObject = new GameObject("Text");
-        textObject.transform.SetParent(buttonObject.transform, false);
-        var text = textObject.AddComponent<Text>();
-        text.text = label;
-        var font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
-        text.font = font != null ? font : Resources.GetBuiltinResource<Font>("Arial.ttf");
-        text.fontSize = 18;
-        text.fontStyle = FontStyle.Bold;
-        text.alignment = TextAnchor.MiddleCenter;
-        text.color = Color.white;
-
+        var text = CreateText(buttonObject.transform, label, 28, FontStyle.Bold);
         var textRect = text.GetComponent<RectTransform>();
-        textRect.anchorMin = Vector2.zero;
-        textRect.anchorMax = Vector2.one;
-        textRect.offsetMin = Vector2.zero;
-        textRect.offsetMax = Vector2.zero;
+        Stretch(textRect);
 
         return button;
+    }
+
+    private static void PlaceMenuButton(Button button, float x, float y)
+    {
+        var rect = button.GetComponent<RectTransform>();
+        rect.anchorMin = new Vector2(0.5f, y);
+        rect.anchorMax = new Vector2(0.5f, y);
+        rect.pivot = new Vector2(0.5f, 0.5f);
+        rect.anchoredPosition = new Vector2(x, 0f);
+        rect.sizeDelta = new Vector2(320f, 64f);
+    }
+
+    private static void Stretch(RectTransform rect)
+    {
+        rect.anchorMin = Vector2.zero;
+        rect.anchorMax = Vector2.one;
+        rect.offsetMin = Vector2.zero;
+        rect.offsetMax = Vector2.zero;
     }
 
     private static void EnsureEventSystem()

@@ -8,7 +8,7 @@ public sealed class BackgroundMusic : MonoBehaviour
 
     [SerializeField] private AudioClip musicClip;
     [SerializeField, Range(0f, 1f)] private float volume = 0.35f;
-    [SerializeField] private bool playOnStart = true;
+    [SerializeField] private bool playOnStart = false;
     [SerializeField] private bool persistBetweenScenes = true;
 
     private AudioSource audioSource;
@@ -65,6 +65,32 @@ public sealed class BackgroundMusic : MonoBehaviour
         if (audioSource != null)
         {
             audioSource.Stop();
+        }
+    }
+
+    public static void PlayCurrent()
+    {
+        if (instance == null)
+        {
+            instance = FindObjectOfType<BackgroundMusic>();
+        }
+
+        if (instance != null)
+        {
+            instance.Play();
+        }
+    }
+
+    public static void StopCurrent()
+    {
+        if (instance == null)
+        {
+            instance = FindObjectOfType<BackgroundMusic>();
+        }
+
+        if (instance != null)
+        {
+            instance.Stop();
         }
     }
 

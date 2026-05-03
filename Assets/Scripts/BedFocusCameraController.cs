@@ -15,9 +15,10 @@ public class BedFocusCameraController : MonoBehaviour
     [SerializeField] private float focusFieldOfView = 38f;
     [SerializeField] private Vector2 backButtonAnchoredPosition = new Vector2(24f, -24f);
     [SerializeField] private Vector2 timerTextAnchoredPosition = new Vector2(0f, -24f);
-    [SerializeField] private Vector2 endDecisionButtonAnchoredPosition = new Vector2(-24f, -24f);
-    [SerializeField] private Vector2 stopButtonAnchoredPosition = new Vector2(-24f, -68f);
-    [SerializeField] private Vector2 continueButtonAnchoredPosition = new Vector2(-140f, -68f);
+    [SerializeField] private Vector2 decisionStopButtonAnchoredPosition = new Vector2(-68f, -76f);
+    [SerializeField] private Vector2 decisionContinueButtonAnchoredPosition = new Vector2(68f, -76f);
+    [SerializeField] private Vector2 previousBedButtonAnchoredPosition = new Vector2(24f, -92f);
+    [SerializeField] private Vector2 nextBedButtonAnchoredPosition = new Vector2(-24f, -92f);
     [SerializeField] private bool buildOptionsUi = true;
     [SerializeField] private bool moveFocusDetailObject = true;
     [SerializeField] private string focusDetailObjectName = "tabletpen";
@@ -25,14 +26,25 @@ public class BedFocusCameraController : MonoBehaviour
     [SerializeField] private float focusDetailScaleMultiplier = 1.35f;
     [SerializeField] private Vector3 focusDetailFaceCameraEulerOffset = new Vector3(0f, 0f, -113.5f);
     [SerializeField] private bool showStoryTextOnTablet = true;
-    [SerializeField] private Vector3 tabletTextLocalPosition = new Vector3(-0.08f, 0.07f, 0.05f);
+    [SerializeField] private Vector3 tabletTextLocalPosition = new Vector3(-0.02f, 0.02f, 0.05f);
     [SerializeField] private Vector3 tabletTextLocalEulerAngles = new Vector3(0f, 180f, -90f);
     [SerializeField] private Vector3 tabletTextLocalScale = new Vector3(0.02f, 0.02f, 0.02f);
     [SerializeField] private float tabletTextCharacterSize = 0.12f;
     [SerializeField] private int tabletTextFontSize = 36;
     [SerializeField] private Color tabletTextColor = Color.black;
+    [SerializeField] private bool addTabletReadingLight = true;
+    [SerializeField] private Vector3 tabletReadingLightLocalPosition = new Vector3(-0.08f, 0.1f, -0.12f);
+    [SerializeField] private float tabletReadingLightIntensity = 7f;
+    [SerializeField] private float tabletReadingLightRange = 8f;
+    [SerializeField] private Color tabletReadingLightColor = new Color(1f, 0.96f, 0.86f, 1f);
+    [SerializeField] private bool addTabletTextBacking = true;
+    [SerializeField] private Vector3 tabletTextBackingLocalPosition = new Vector3(1.55f, -1.65f, 0.05f);
+    [SerializeField] private Vector3 tabletTextBackingLocalScale = new Vector3(10f, 7f, 1f);
+    [SerializeField] private Color tabletTextBackingColor = new Color(0.94f, 0.92f, 0.84f, 1f);
 
     private readonly List<FocusTarget> focusTargets = new List<FocusTarget>();
+    private readonly Dictionary<Transform, DetailTransformSnapshot> detailSnapshots = new Dictionary<Transform, DetailTransformSnapshot>();
+    private readonly Dictionary<Transform, Coroutine> detailMoveRoutines = new Dictionary<Transform, Coroutine>();
     private Coroutine moveRoutine;
     private Vector3 overviewPosition;
     private Quaternion overviewRotation;
@@ -42,14 +54,19 @@ public class BedFocusCameraController : MonoBehaviour
     private BedPatientSlot focusedPatientSlot;
     private GameObject optionsPanel;
     private RectTransform backButtonRect;
-    private GameObject endDecisionButtonObject;
     private GameObject stopButtonObject;
     private GameObject continueButtonObject;
+    private GameObject previousBedButtonObject;
+    private GameObject nextBedButtonObject;
     private Text timerText;
-    private Coroutine detailMoveRoutine;
     private PatientStorySystem storySystem;
     private TextMesh focusedStoryText;
-    private readonly Dictionary<Transform, DetailTransformSnapshot> detailSnapshots = new Dictionary<Transform, DetailTransformSnapshot>();
+    private Light focusedTabletLight;
+    private bool closeBedUiVisible;
+    private int lastOverviewReturnFrame = -1;
+
+    public bool CanFocusFromWorldClick => focusedBed == null;
+    public int LastOverviewReturnFrame => lastOverviewReturnFrame;
 
     private struct FocusTarget
     {
@@ -81,6 +98,8 @@ public class BedFocusCameraController : MonoBehaviour
             BuildOptionsUi();
             ShowOptions(false);
         }
+
+        EnsurePauseMenuController();
     }
 
     private void Update()
@@ -129,13 +148,14 @@ public class BedFocusCameraController : MonoBehaviour
             }
         }
 
+        SortFocusTargets();
+
         if (focusTargets.Count > 0)
         {
             return;
         }
 
         var sceneObjects = FindObjectsOfType<Transform>();
-
         foreach (var sceneObject in sceneObjects)
         {
             if (!sceneObject.name.StartsWith(bedNamePrefix))
@@ -159,47 +179,8 @@ public class BedFocusCameraController : MonoBehaviour
                 });
             }
         }
-    }
 
-    private void TryFocusClickedBed()
-    {
-        if (controlledCamera == null)
-        {
-            return;
-        }
-
-        if (focusTargets.Count == 0)
-        {
-            RefreshBeds();
-        }
-
-        var ray = controlledCamera.ScreenPointToRay(Input.mousePosition);
-        var nearestDistance = float.PositiveInfinity;
-        FocusTarget nearestTarget = default;
-        Bounds nearestBounds = default;
-
-        foreach (var focusTarget in focusTargets)
-        {
-            var bedRoot = focusTarget.Root;
-            if (bedRoot == null || !TryGetRendererBounds(bedRoot, out var bounds))
-            {
-                continue;
-            }
-
-            if (!bounds.IntersectRay(ray, out var distance) || distance >= nearestDistance)
-            {
-                continue;
-            }
-
-            nearestDistance = distance;
-            nearestTarget = focusTarget;
-            nearestBounds = bounds;
-        }
-
-        if (nearestTarget.Root != null)
-        {
-            FocusBed(nearestTarget, nearestBounds);
-        }
+        SortFocusTargets();
     }
 
     public void Focus(BedFocusTarget bedTarget)
@@ -227,6 +208,93 @@ public class BedFocusCameraController : MonoBehaviour
         }, bounds);
     }
 
+    private void FocusAdjacentBed(int direction)
+    {
+        if (focusedBed == null)
+        {
+            return;
+        }
+
+        if (focusTargets.Count == 0)
+        {
+            RefreshBeds();
+        }
+
+        var currentIndex = GetFocusedBedIndex();
+        if (currentIndex < 0)
+        {
+            return;
+        }
+
+        var nextIndex = currentIndex + direction;
+        if (nextIndex < 0 || nextIndex >= focusTargets.Count)
+        {
+            return;
+        }
+
+        var target = focusTargets[nextIndex];
+        if (target.Root != null && TryGetRendererBounds(target.Root, out var bounds))
+        {
+            FocusBed(target, bounds);
+        }
+    }
+
+    private void FocusPreviousBed()
+    {
+        FocusAdjacentBed(-1);
+    }
+
+    private void FocusNextBed()
+    {
+        FocusAdjacentBed(1);
+    }
+
+    private int GetFocusedBedIndex()
+    {
+        for (var i = 0; i < focusTargets.Count; i++)
+        {
+            if (focusTargets[i].Root == focusedBed)
+            {
+                return i;
+            }
+        }
+
+        return -1;
+    }
+
+    private void SortFocusTargets()
+    {
+        focusTargets.Sort((left, right) =>
+        {
+            if (left.Root == right.Root)
+            {
+                return 0;
+            }
+
+            if (left.Root == null)
+            {
+                return 1;
+            }
+
+            if (right.Root == null)
+            {
+                return -1;
+            }
+
+            return GetFocusTargetOrderX(left.Root).CompareTo(GetFocusTargetOrderX(right.Root));
+        });
+    }
+
+    private float GetFocusTargetOrderX(Transform root)
+    {
+        if (controlledCamera != null && root != null && TryGetRendererBounds(root, out var bounds))
+        {
+            return controlledCamera.WorldToViewportPoint(bounds.center).x;
+        }
+
+        return root != null ? root.position.x : 0f;
+    }
+
     private void FocusBed(FocusTarget target, Bounds bounds)
     {
         focusedBed = target.Root;
@@ -247,6 +315,8 @@ public class BedFocusCameraController : MonoBehaviour
         MoveCamera(targetPosition, targetRotation, focusFieldOfView);
         MoveDetailObjectToFocusedPose(target.Root, targetPosition, targetRotation);
         ShowOptions(true);
+        RefreshNavigationButtons();
+        RefreshStoryHud();
     }
 
     public void ReturnToOverview()
@@ -255,9 +325,11 @@ public class BedFocusCameraController : MonoBehaviour
         ReturnFocusedDetailObject();
         focusedBed = null;
         focusedPatientSlot = null;
+        lastOverviewReturnFrame = Time.frameCount;
         BedLightController.SetFocusedBed(null);
         MoveCamera(overviewPosition, overviewRotation, overviewFieldOfView);
         ShowOptions(false);
+        RefreshStoryHud();
     }
 
     public void ApplyFocusedTreatment(TreatmentType treatment)
@@ -337,11 +409,6 @@ public class BedFocusCameraController : MonoBehaviour
         return true;
     }
 
-    private bool PointerIsOverUi()
-    {
-        return EventSystem.current != null && EventSystem.current.IsPointerOverGameObject();
-    }
-
     private bool PointerIsOverBackButton()
     {
         return backButtonRect != null &&
@@ -362,6 +429,14 @@ public class BedFocusCameraController : MonoBehaviour
         eventSystem.AddComponent<StandaloneInputModule>();
     }
 
+    private void EnsurePauseMenuController()
+    {
+        if (GetComponent<PauseMenuController>() == null)
+        {
+            gameObject.AddComponent<PauseMenuController>();
+        }
+    }
+
     private void BuildOptionsUi()
     {
         if (optionsPanel != null)
@@ -379,7 +454,17 @@ public class BedFocusCameraController : MonoBehaviour
         optionsPanel = backButton.gameObject;
         backButtonRect = optionsPanel.GetComponent<RectTransform>();
 
-        timerText = CreateText(canvasObject.transform, "Time: 30s", 22, FontStyle.Bold);
+        var previousBedButton = CreateButton(canvasObject.transform, "Left", previousBedButtonAnchoredPosition, FocusPreviousBed);
+        previousBedButtonObject = previousBedButton.gameObject;
+
+        var nextBedButton = CreateButton(canvasObject.transform, "Right", nextBedButtonAnchoredPosition, FocusNextBed);
+        nextBedButtonObject = nextBedButton.gameObject;
+        var nextBedButtonRect = nextBedButtonObject.GetComponent<RectTransform>();
+        nextBedButtonRect.anchorMin = new Vector2(1f, 1f);
+        nextBedButtonRect.anchorMax = new Vector2(1f, 1f);
+        nextBedButtonRect.pivot = new Vector2(1f, 1f);
+
+        timerText = CreateText(canvasObject.transform, string.Empty, 22, FontStyle.Bold);
         timerText.alignment = TextAnchor.MiddleCenter;
         var timerRect = timerText.GetComponent<RectTransform>();
         timerRect.anchorMin = new Vector2(0.5f, 1f);
@@ -388,34 +473,72 @@ public class BedFocusCameraController : MonoBehaviour
         timerRect.anchoredPosition = timerTextAnchoredPosition;
         timerRect.sizeDelta = new Vector2(760f, 42f);
 
-        var endDecisionButton = CreateButton(canvasObject.transform, "End", endDecisionButtonAnchoredPosition, EndCurrentDecision);
-        endDecisionButtonObject = endDecisionButton.gameObject;
-        var endButtonRect = endDecisionButtonObject.GetComponent<RectTransform>();
-        endButtonRect.anchorMin = new Vector2(1f, 1f);
-        endButtonRect.anchorMax = new Vector2(1f, 1f);
-        endButtonRect.pivot = new Vector2(1f, 1f);
-
-        var stopButton = CreateButton(canvasObject.transform, "Stop", stopButtonAnchoredPosition, StopTreatment);
+        var stopButton = CreateButton(canvasObject.transform, "Stop", decisionStopButtonAnchoredPosition, StopTreatment);
         stopButtonObject = stopButton.gameObject;
         var stopButtonRect = stopButtonObject.GetComponent<RectTransform>();
-        stopButtonRect.anchorMin = new Vector2(1f, 1f);
-        stopButtonRect.anchorMax = new Vector2(1f, 1f);
-        stopButtonRect.pivot = new Vector2(1f, 1f);
+        stopButtonRect.anchorMin = new Vector2(0.5f, 1f);
+        stopButtonRect.anchorMax = new Vector2(0.5f, 1f);
+        stopButtonRect.pivot = new Vector2(0.5f, 1f);
 
-        var continueButton = CreateButton(canvasObject.transform, "Continue", continueButtonAnchoredPosition, ContinueTreatment);
+        var continueButton = CreateButton(canvasObject.transform, "Continue", decisionContinueButtonAnchoredPosition, ContinueTreatment);
         continueButtonObject = continueButton.gameObject;
         var continueButtonRect = continueButtonObject.GetComponent<RectTransform>();
-        continueButtonRect.anchorMin = new Vector2(1f, 1f);
-        continueButtonRect.anchorMax = new Vector2(1f, 1f);
-        continueButtonRect.pivot = new Vector2(1f, 1f);
-        continueButtonRect.sizeDelta = new Vector2(120f, 36f);
+        continueButtonRect.anchorMin = new Vector2(0.5f, 1f);
+        continueButtonRect.anchorMax = new Vector2(0.5f, 1f);
+        continueButtonRect.pivot = new Vector2(0.5f, 1f);
+        continueButtonRect.sizeDelta = new Vector2(116f, 40f);
     }
 
     private void ShowOptions(bool visible)
     {
+        closeBedUiVisible = visible;
+
         if (optionsPanel != null)
         {
             optionsPanel.SetActive(visible);
+        }
+
+        if (visible)
+        {
+            RefreshNavigationButtons();
+            RefreshStoryHud();
+        }
+        else
+        {
+            if (previousBedButtonObject != null)
+            {
+                previousBedButtonObject.SetActive(false);
+            }
+
+            if (nextBedButtonObject != null)
+            {
+                nextBedButtonObject.SetActive(false);
+            }
+
+            if (stopButtonObject != null)
+            {
+                stopButtonObject.SetActive(false);
+            }
+
+            if (continueButtonObject != null)
+            {
+                continueButtonObject.SetActive(false);
+            }
+        }
+    }
+
+    private void RefreshNavigationButtons()
+    {
+        var focusedIndex = GetFocusedBedIndex();
+
+        if (previousBedButtonObject != null)
+        {
+            previousBedButtonObject.SetActive(focusedIndex > 0);
+        }
+
+        if (nextBedButtonObject != null)
+        {
+            nextBedButtonObject.SetActive(focusedIndex >= 0 && focusedIndex < focusTargets.Count - 1);
         }
     }
 
@@ -452,9 +575,9 @@ public class BedFocusCameraController : MonoBehaviour
         rect.anchorMax = new Vector2(0f, 1f);
         rect.pivot = new Vector2(0f, 1f);
         rect.anchoredPosition = anchoredPosition;
-        rect.sizeDelta = new Vector2(104f, 36f);
+        rect.sizeDelta = new Vector2(116f, 40f);
 
-        var text = CreateText(buttonObject.transform, label, 14, FontStyle.Normal);
+        var text = CreateText(buttonObject.transform, label, 19, FontStyle.Bold);
         text.alignment = TextAnchor.MiddleCenter;
         var textRect = text.GetComponent<RectTransform>();
         textRect.anchorMin = Vector2.zero;
@@ -476,18 +599,26 @@ public class BedFocusCameraController : MonoBehaviour
         var detailObject = FindFocusDetailObject(focusRoot);
         if (previousDetailObject != null && previousDetailObject != detailObject)
         {
+            SetFocusedStoryTextVisible(false);
+            SetFocusedTabletLightVisible(false);
             RestoreDetailObject(previousDetailObject, transitionSeconds);
         }
 
         if (detailObject == null)
         {
+            SetFocusedStoryTextVisible(false);
+            SetFocusedTabletLightVisible(false);
             focusedDetailObject = null;
+            focusedStoryText = null;
+            focusedTabletLight = null;
             return;
         }
 
         focusedDetailObject = detailObject;
         focusedStoryText = EnsureTabletStoryText(detailObject);
+        focusedTabletLight = EnsureTabletReadingLight(detailObject);
         SetFocusedStoryTextVisible(true);
+        SetFocusedTabletLightVisible(true);
         RefreshFocusedStoryText();
 
         if (!detailSnapshots.ContainsKey(detailObject))
@@ -517,8 +648,10 @@ public class BedFocusCameraController : MonoBehaviour
         }
 
         RestoreDetailObject(focusedDetailObject, 0f);
+        SetFocusedTabletLightVisible(false);
         focusedDetailObject = null;
         focusedStoryText = null;
+        focusedTabletLight = null;
     }
 
     private void RestoreDetailObject(Transform detailObject, float seconds)
@@ -545,11 +678,12 @@ public class BedFocusCameraController : MonoBehaviour
     {
         if (seconds <= 0f)
         {
-            if (detailMoveRoutine != null)
+            if (detailMoveRoutines.TryGetValue(detailObject, out var activeRoutine) && activeRoutine != null)
             {
-                StopCoroutine(detailMoveRoutine);
-                detailMoveRoutine = null;
+                StopCoroutine(activeRoutine);
             }
+
+            detailMoveRoutines.Remove(detailObject);
 
             if (restoreLocalAtEnd)
             {
@@ -567,12 +701,12 @@ public class BedFocusCameraController : MonoBehaviour
             return;
         }
 
-        if (detailMoveRoutine != null)
+        if (detailMoveRoutines.TryGetValue(detailObject, out var runningRoutine) && runningRoutine != null)
         {
-            StopCoroutine(detailMoveRoutine);
+            StopCoroutine(runningRoutine);
         }
 
-        detailMoveRoutine = StartCoroutine(MoveDetailObjectRoutine(
+        detailMoveRoutines[detailObject] = StartCoroutine(MoveDetailObjectRoutine(
             detailObject,
             targetPosition,
             targetRotation,
@@ -600,7 +734,6 @@ public class BedFocusCameraController : MonoBehaviour
         {
             if (detailObject == null)
             {
-                detailMoveRoutine = null;
                 yield break;
             }
 
@@ -628,7 +761,10 @@ public class BedFocusCameraController : MonoBehaviour
             detailObject.localScale = targetLocalScale;
         }
 
-        detailMoveRoutine = null;
+        if (detailMoveRoutines.ContainsKey(detailObject))
+        {
+            detailMoveRoutines.Remove(detailObject);
+        }
     }
 
     private Transform FindFocusDetailObject(Transform focusRoot)
@@ -662,6 +798,8 @@ public class BedFocusCameraController : MonoBehaviour
         {
             if (textMesh.name == "Tablet Story Text")
             {
+                ConfigureTabletStoryText(textMesh);
+                EnsureTabletTextBacking(textMesh.transform);
                 return textMesh;
             }
         }
@@ -671,15 +809,109 @@ public class BedFocusCameraController : MonoBehaviour
         textObject.transform.localPosition = tabletTextLocalPosition;
         textObject.transform.localRotation = Quaternion.Euler(tabletTextLocalEulerAngles);
         textObject.transform.localScale = tabletTextLocalScale;
+        EnsureTabletTextBacking(textObject.transform);
 
         var text = textObject.AddComponent<TextMesh>();
-        text.anchor = TextAnchor.UpperLeft;
-        text.alignment = TextAlignment.Left;
+        ConfigureTabletStoryText(text);
+
+        return text;
+    }
+
+    private void ConfigureTabletStoryText(TextMesh text)
+    {
+        text.richText = true;
+        text.anchor = TextAnchor.MiddleCenter;
+        text.alignment = TextAlignment.Center;
         text.characterSize = tabletTextCharacterSize;
         text.fontSize = tabletTextFontSize;
         text.color = tabletTextColor;
+    }
 
-        return text;
+    private void EnsureTabletTextBacking(Transform textTransform)
+    {
+        if (!addTabletTextBacking || textTransform == null)
+        {
+            return;
+        }
+
+        var existingBacking = textTransform.Find("Tablet Text Backing");
+        if (existingBacking != null)
+        {
+            existingBacking.localPosition = tabletTextBackingLocalPosition;
+            existingBacking.localRotation = Quaternion.identity;
+            existingBacking.localScale = tabletTextBackingLocalScale;
+            return;
+        }
+
+        var backingObject = GameObject.CreatePrimitive(PrimitiveType.Quad);
+        backingObject.name = "Tablet Text Backing";
+        backingObject.transform.SetParent(textTransform, false);
+        backingObject.transform.localPosition = tabletTextBackingLocalPosition;
+        backingObject.transform.localRotation = Quaternion.identity;
+        backingObject.transform.localScale = tabletTextBackingLocalScale;
+
+        var collider = backingObject.GetComponent<Collider>();
+        if (collider != null)
+        {
+            Destroy(collider);
+        }
+
+        var renderer = backingObject.GetComponent<MeshRenderer>();
+        renderer.sharedMaterial = CreateTabletBackingMaterial();
+    }
+
+    private Material CreateTabletBackingMaterial()
+    {
+        var shader = Shader.Find("Unlit/Color");
+        if (shader == null)
+        {
+            shader = Shader.Find("Sprites/Default");
+        }
+
+        var material = new Material(shader);
+        if (material.HasProperty("_Color"))
+        {
+            material.SetColor("_Color", tabletTextBackingColor);
+        }
+
+        material.renderQueue = 2450;
+        return material;
+    }
+
+    private Light EnsureTabletReadingLight(Transform detailObject)
+    {
+        if (!addTabletReadingLight || detailObject == null)
+        {
+            return null;
+        }
+
+        foreach (var light in detailObject.GetComponentsInChildren<Light>(true))
+        {
+            if (light.name == "Tablet Reading Light")
+            {
+                ConfigureTabletReadingLight(light);
+                return light;
+            }
+        }
+
+        var lightObject = new GameObject("Tablet Reading Light");
+        lightObject.transform.SetParent(detailObject, false);
+        lightObject.transform.localPosition = tabletReadingLightLocalPosition;
+        lightObject.transform.localRotation = Quaternion.identity;
+
+        var readingLight = lightObject.AddComponent<Light>();
+        readingLight.type = LightType.Point;
+        ConfigureTabletReadingLight(readingLight);
+
+        return readingLight;
+    }
+
+    private void ConfigureTabletReadingLight(Light readingLight)
+    {
+        readingLight.color = tabletReadingLightColor;
+        readingLight.intensity = tabletReadingLightIntensity;
+        readingLight.range = tabletReadingLightRange;
+        readingLight.shadows = LightShadows.None;
     }
 
     private void RefreshFocusedStoryText()
@@ -701,12 +933,12 @@ public class BedFocusCameraController : MonoBehaviour
         }
     }
 
-    private void EndCurrentDecision()
+    private void SetFocusedTabletLightVisible(bool visible)
     {
-        storySystem = storySystem != null ? storySystem : PatientStorySystem.EnsureExists();
-        storySystem.EndCurrentDecision();
-        RefreshFocusedStoryText();
-        RefreshStoryHud();
+        if (focusedTabletLight != null)
+        {
+            focusedTabletLight.gameObject.SetActive(visible);
+        }
     }
 
     private void StopTreatment()
@@ -735,19 +967,14 @@ public class BedFocusCameraController : MonoBehaviour
         storySystem = storySystem != null ? storySystem : PatientStorySystem.EnsureExists();
         timerText.text = storySystem.PromptText;
 
-        if (endDecisionButtonObject != null)
-        {
-            endDecisionButtonObject.SetActive(storySystem.CanEndDecision);
-        }
-
         if (stopButtonObject != null)
         {
-            stopButtonObject.SetActive(storySystem.CanStopTreatment);
+            stopButtonObject.SetActive(!closeBedUiVisible && focusedBed == null && storySystem.CanStopTreatment);
         }
 
         if (continueButtonObject != null)
         {
-            continueButtonObject.SetActive(storySystem.CanContinueTreatment);
+            continueButtonObject.SetActive(!closeBedUiVisible && focusedBed == null && storySystem.CanContinueTreatment);
         }
     }
 }

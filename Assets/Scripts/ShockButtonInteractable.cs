@@ -8,6 +8,11 @@ public class ShockButtonInteractable : MonoBehaviour
     private void Awake()
     {
         interactable = GetComponent<Interactable>();
+        if (GetComponent<InteractableGlow>() == null)
+        {
+            gameObject.AddComponent<InteractableGlow>();
+        }
+
         interactable.Clicked.RemoveListener(ShockPatient);
         interactable.Clicked.AddListener(ShockPatient);
     }

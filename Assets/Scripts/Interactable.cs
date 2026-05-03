@@ -15,6 +15,7 @@ public class Interactable : MonoBehaviour
     public UnityEvent Clicked => onClick;
     public UnityEvent HoverEntered => onHoverEnter;
     public UnityEvent HoverExited => onHoverExit;
+    public bool IsHovered => isHovered;
 
     private void Awake()
     {

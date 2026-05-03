@@ -6,8 +6,10 @@ public class BedFocusTarget : MonoBehaviour
     [SerializeField] private Transform focusRoot;
     [SerializeField] private string displayName;
     [SerializeField] private bool installCameraController = true;
+    [SerializeField] private bool hideGlowWhileAnyBedFocused = true;
 
     private Interactable interactable;
+    private InteractableGlow glow;
 
     public Transform FocusRoot => focusRoot != null ? focusRoot : transform;
     public string DisplayName => string.IsNullOrWhiteSpace(displayName) ? gameObject.name : displayName;
@@ -26,7 +28,7 @@ public class BedFocusTarget : MonoBehaviour
     public void Focus()
     {
         var focusController = EnsureCameraControllers();
-        if (focusController != null)
+        if (focusController != null && focusController.CanFocusFromWorldClick)
         {
             focusController.Focus(this);
         }
@@ -39,6 +41,14 @@ public class BedFocusTarget : MonoBehaviour
         {
             interactable = gameObject.AddComponent<Interactable>();
         }
+
+        glow = GetComponent<InteractableGlow>();
+        if (glow == null)
+        {
+            glow = gameObject.AddComponent<InteractableGlow>();
+        }
+
+        glow.HideWhileBedFocused = hideGlowWhileAnyBedFocused;
 
         interactable.Clicked.RemoveListener(Focus);
         interactable.Clicked.AddListener(Focus);

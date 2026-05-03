@@ -9,6 +9,7 @@ public sealed class BedLightController : MonoBehaviour
     private static BedLightController focusedController;
 
     [SerializeField, Range(0f, 1f)] private float dimMultiplier = 0.35f;
+    [SerializeField, Range(0f, 1f)] private float focusedMultiplier = 0.55f;
     [SerializeField] private float flickerDurationSeconds = 0.85f;
     [SerializeField] private float flickerIntervalSeconds = 0.055f;
     [SerializeField] private Vector2 flickerIntensityMultiplier = new Vector2(0.05f, 1.25f);
@@ -138,7 +139,7 @@ public sealed class BedLightController : MonoBehaviour
 
     private float GetFocusMultiplier()
     {
-        return focusedController == this ? 1f : dimMultiplier;
+        return focusedController == this ? focusedMultiplier : dimMultiplier;
     }
 
     private void CacheLights()
