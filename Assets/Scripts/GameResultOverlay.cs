@@ -7,12 +7,12 @@ public static class GameResultOverlay
 {
     public static void ShowWin()
     {
-        Show("YOU WON!!!", "You saved 2 people.");
+        Show("You Won!", "You saved 2 people.");
     }
 
     public static void ShowLoss()
     {
-        Show("YOU LOST", "The final shock killed them all.");
+        Show("You Lost!", "The final shock killed them all.");
     }
 
     private static void Show(string title, string subtitle)

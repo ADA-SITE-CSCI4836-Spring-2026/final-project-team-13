@@ -136,12 +136,12 @@ public class PatientStorySystem : MonoBehaviour
 
             if (phase == StoryPhase.Won)
             {
-                return "YOU WON!!! You saved 2 people.";
+                return string.Empty;
             }
 
             if (phase == StoryPhase.Lost)
             {
-                return "YOU LOST. The final shock killed them all.";
+                return string.Empty;
             }
 
             if (!timerStarted)
@@ -422,7 +422,7 @@ public class PatientStorySystem : MonoBehaviour
             return;
         }
 
-        if (IsTimerRunning)
+        if (IsTimerRunning && Time.timeScale > 0f && GameObject.Find("Pause Menu Canvas") == null)
         {
             heartbeatAudioSource.volume = heartbeatVolume;
             if (!heartbeatAudioSource.isPlaying)

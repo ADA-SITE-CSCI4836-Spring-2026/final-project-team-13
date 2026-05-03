@@ -50,6 +50,7 @@ public sealed class PauseMenuController : MonoBehaviour
     {
         isPaused = true;
         BackgroundMusic.StopCurrent();
+        StopGameplayAudio();
         InteractableGlow.ClearAll();
         Time.timeScale = 0f;
         SetVisible(true);
@@ -61,6 +62,19 @@ public sealed class PauseMenuController : MonoBehaviour
         Time.timeScale = 1f;
         SetVisible(false);
         BackgroundMusic.PlayCurrent();
+    }
+
+    private static void StopGameplayAudio()
+    {
+        foreach (var audioSource in FindObjectsOfType<AudioSource>())
+        {
+            if (audioSource.GetComponent<BackgroundMusic>() != null)
+            {
+                continue;
+            }
+
+            audioSource.Stop();
+        }
     }
 
     private void Restart()
